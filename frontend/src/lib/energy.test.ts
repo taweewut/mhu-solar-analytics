@@ -38,6 +38,14 @@ describe("dayTotals", () => {
     });
   });
 
+  it("takes each counter's highest value: the inverter zeroes them just before midnight", () => {
+    const rows = [
+      row("2026-09-22 23:53:36", { today_yield_kwh: 13.6, today_from_battery_kwh: 9.4 }),
+      row("2026-09-22 23:58:36", { today_yield_kwh: 0, today_from_battery_kwh: 0 }),
+    ];
+    expect(dayTotals(rows, "2026-09-22")).toMatchObject({ pv: 13.6, discharge: 9.4, lastT: 1438 });
+  });
+
   it("integrates 5-min power when counters are missing", () => {
     const rows = [0, 5, 10].map((m) => row(`2026-09-22 10:${String(m).padStart(2, "0")}:00`, { pv_w: 1200 }));
     expect(dayTotals(rows, "2026-09-22")!.pv).toBeCloseTo(0.3, 8); // 3 × 1.2 kW × 5 min

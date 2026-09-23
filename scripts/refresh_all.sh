@@ -4,7 +4,8 @@
 #
 # Folders come from .env (copy .env.example): MOMSOLAR_SOLIS_RAW_DIR, MOMSOLAR_HUAWEI_RAW_DIR
 # and, optionally, MOMSOLAR_SHEET (the Google Sheet as .xlsx, for PEA/MEA bills and Ft).
-# A home whose folder isn't set is skipped.
+# A home whose folder isn't set is skipped. With MOMSOLAR_SOLIS_KEY_ID/SECRET set, MomHome's
+# last two days (5-min + that month's daily rows) are then pulled from the SolisCloud API.
 #
 #   scripts/refresh_all.sh                               # inverter data (+ bills if MOMSOLAR_SHEET)
 #   MOMSOLAR_SHEET=~/Downloads/PEA.xlsx scripts/refresh_all.sh
@@ -31,6 +32,11 @@ if [[ -n "${MOMSOLAR_SOLIS_RAW_DIR:-}" ]]; then
     --raw "$MOMSOLAR_SOLIS_RAW_DIR" ${SHEET:+--pea-log "$SHEET"}
 else
   echo "== MomHome: MOMSOLAR_SOLIS_RAW_DIR not set, skipped"
+fi
+
+if [[ -n "${MOMSOLAR_SOLIS_KEY_ID:-}" && -n "${MOMSOLAR_SOLIS_KEY_SECRET:-}" ]]; then
+  echo "== MomHome (SolisCloud API)"
+  "$PY" -W ignore -m momsolar.fetch_solis_api --home momhome --out "$OUT"
 fi
 
 if [[ -n "${MOMSOLAR_HUAWEI_RAW_DIR:-}" ]]; then

@@ -55,7 +55,7 @@ class Reply(io.BytesIO):
 
 
 def fake_urlopen(reply, seen):
-    def urlopen(req, timeout):
+    def urlopen(req, timeout, context=None):
         seen.append(req)
         return Reply(json.dumps(reply).encode())
 

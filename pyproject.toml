@@ -12,6 +12,7 @@ authors = [{ name = "taweewut", email = "taweewut@gmail.com" }]
 dependencies = [
     "openpyxl>=3.1",
     "xlrd>=2.0",
+    "certifi",  # CA bundle for the SolisCloud API (python.org macOS builds have none)
 ]
 
 [project.optional-dependencies]

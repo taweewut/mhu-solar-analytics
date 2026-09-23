@@ -38,6 +38,8 @@ frontend/public/data/  (git-ignored; seeded from sample_data/)
   mhuhome/daily.csv    one row per day (Huawei → same columns; battery columns blank)
   mhuhome/bills.csv    MEA bills
 src/momsolar/
+  solis_api.py         SolisCloud API client (signed requests; keys from .env)
+  fetch_solis_api.py   SolisCloud API → data/<home>/ (same rows as the exports)
   schema.py            the data layout + CSV columns (project.md §3): the contract
   fetch_solis_day.py   Solis .xlsx/.xls exports + PEA Log → data/<home>/
   fetch_huawei.py      FusionSolar monthly reports + MEA Log → data/<home>/
@@ -98,6 +100,14 @@ It runs these, which you can also run on their own:
 .venv/bin/python -m momsolar.fetch_huawei    --home mhuhome --raw "<Solar Energy>/Raw from Inverter report" [--mea-log PEA.xlsx]
 ```
 
+- **SolisCloud API (MomHome):** with `MOMSOLAR_SOLIS_KEY_ID` / `MOMSOLAR_SOLIS_KEY_SECRET`
+  in `.env` (SolisCloud → Account → Basic Settings → API Management), `refresh_all.sh` and
+  `POST /refresh` also pull the last two days: 5-min readings (`inverterDay`) and that month's
+  daily rows (`inverterMonth`), merged exactly like the exports. Backfill with
+  `.venv/bin/python -m momsolar.fetch_solis_api --since 2026-03-29`; inspect raw replies with
+  `python -m momsolar.solis_api probe` (saved to git-ignored `raw_api/`). Checked against the
+  exports: every daily field and all 5-min power/SOC/counter fields match. The API has no alarm
+  code or per-port load counters, so those are blank; the day's load total is Solis's own.
 - **Files are recognised by their header row, not their name.** SolisCloud reuses
   "Inverter History Report_…" for different exports, and FusionSolar has used three names for
   the same report. Anything else in the folders (plant reports, a Power BI export) is skipped.

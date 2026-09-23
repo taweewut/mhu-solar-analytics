@@ -26,6 +26,7 @@ import hashlib
 import hmac
 import json
 import os
+import ssl
 import sys
 import time
 import urllib.error
@@ -43,6 +44,15 @@ MIN_INTERVAL = 0.6  # s between calls: the API allows ~2 requests per second
 
 class SolisApiError(RuntimeError):
     pass
+
+
+def ssl_context() -> ssl.SSLContext:
+    """CA bundle from certifi when installed: python.org's macOS build ships none of its own."""
+    try:
+        import certifi
+    except ImportError:
+        return ssl.create_default_context()
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 def content_md5(body: bytes) -> str:
@@ -109,10 +119,12 @@ class SolisClient:
             headers=signed_headers(self.key_id, self.secret, body, path, date),
         )
         try:
-            with urllib.request.urlopen(req, timeout=30) as res:
+            with urllib.request.urlopen(req, timeout=30, context=ssl_context()) as res:
                 reply = json.load(res)
         except urllib.error.HTTPError as e:
             raise SolisApiError(f"{path}: HTTP {e.code} {e.read().decode(errors='replace')}") from e
+        except urllib.error.URLError as e:
+            raise SolisApiError(f"{path}: {e.reason}") from e
         finally:
             self._last = time.monotonic()
         if not reply.get("success") or str(reply.get("code")) != "0":

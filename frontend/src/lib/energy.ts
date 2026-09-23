@@ -65,6 +65,14 @@ export function integrateKwh(P: Reading[], f: (p: Reading) => number): number {
   return e;
 }
 
+type CounterKey =
+  | "today_yield_kwh"
+  | "today_to_battery_kwh"
+  | "today_from_battery_kwh"
+  | "today_from_grid_kwh"
+  | "today_grid_load_kwh"
+  | "today_backup_load_kwh";
+
 export interface DayTotals {
   date: string;
   /** Minute of the last reading. */
@@ -82,7 +90,9 @@ export interface DayTotals {
 }
 
 /**
- * kWh totals for one day. Uses the inverter's own "Today …" counters from the last reading
+ * kWh totals for one day. Uses the inverter's own "Today …" counters — their highest value
+ * that day, since they only count up and the inverter zeroes them a few minutes before
+ * midnight (the 23:58 reading reads 0) —
  * (what SolisCloud reports); integrates the 5-min power only when a counter is missing.
  */
 export function dayTotals(rows: FiveMinRow[], date: string): DayTotals | null {
@@ -90,20 +100,24 @@ export function dayTotals(rows: FiveMinRow[], date: string): DayTotals | null {
   if (!day.length) return null;
   const last = day[day.length - 1];
   const P = readingsFor(day, date);
-  const pick = (v: number | null, f: (p: Reading) => number) => (v != null ? v : integrateKwh(P, f));
-  const gridLoad = pick(last.today_grid_load_kwh, (p) => p.gridLoad);
-  const backupLoad = pick(last.today_backup_load_kwh, (p) => p.backupLoad);
+  const peak = (k: CounterKey): number | null => {
+    const vs = day.map((r) => r[k]).filter((v): v is number => v != null && Number.isFinite(v));
+    return vs.length ? Math.max(...vs) : null;
+  };
+  const pick = (k: CounterKey, f: (p: Reading) => number) => peak(k) ?? integrateKwh(P, f);
+  const gridLoad = pick("today_grid_load_kwh", (p) => p.gridLoad);
+  const backupLoad = pick("today_backup_load_kwh", (p) => p.backupLoad);
   return {
     date,
     lastT: minuteOfDay(last.time),
     count: day.length,
-    pv: pick(last.today_yield_kwh, (p) => p.pv),
+    pv: pick("today_yield_kwh", (p) => p.pv),
     gridLoad,
     backupLoad,
     load: gridLoad + backupLoad,
-    charge: pick(last.today_to_battery_kwh, (p) => Math.max(p.bat, 0)),
-    discharge: pick(last.today_from_battery_kwh, (p) => Math.max(-p.bat, 0)),
-    gridImport: pick(last.today_from_grid_kwh, (p) => p.grid),
+    charge: pick("today_to_battery_kwh", (p) => Math.max(p.bat, 0)),
+    discharge: pick("today_from_battery_kwh", (p) => Math.max(-p.bat, 0)),
+    gridImport: pick("today_from_grid_kwh", (p) => p.grid),
   };
 }
 
