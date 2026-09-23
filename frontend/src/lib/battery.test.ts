@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DAY_ROWS, PROJECT_DAILY } from "@/lib/__fixtures__/project";
-import { equivalentCycles, hourlySoc, roundTrip, socFill, socHeatmap, sunriseReading } from "@/lib/battery";
+import { equivalentCycles, hourlySoc, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap } from "@/lib/battery";
+import type { BmsRow } from "@/lib/types";
 import { readingsFor, sumDaily } from "@/lib/energy";
 import { hm } from "@/lib/format";
 import { monthlyTotals } from "@/lib/tariff";
@@ -74,5 +75,33 @@ describe("SOC heatmap", () => {
   it("mixes green by SOC with a 6 % floor", () => {
     expect(socFill(0)).toBe("color-mix(in srgb, #3fa66a 6%, var(--color-bg))");
     expect(socFill(63)).toBe("color-mix(in srgb, #3fa66a 63%, var(--color-bg))");
+  });
+});
+
+describe("battery temperature heatmap (BMS log, forward-only)", () => {
+  const b = (time: string, max: number | null): BmsRow => ({
+    time, temp_min_c: max == null ? null : max - 1, temp_max_c: max, cell_min_v: null, cell_max_v: null, soc_pct: null,
+  });
+  const rows = [b("2026-09-23 10:00:00", 31), b("2026-09-23 10:45:00", 33), b("2026-09-23 12:15:00", null), b("2026-09-22 23:30:00", 30)];
+  const heat = tempHeatmap(rows, "2026-09-23", 3);
+
+  it("warmest sensor per hour; blank samples and unlogged hours are missing, not 0", () => {
+    expect(heat.map((r) => r.date)).toEqual(["2026-09-23", "2026-09-22", "2026-09-21"]);
+    expect(heat[0].cells[10]).toEqual({ kind: "temp", c: 33 });
+    expect(heat[0].cells[9]).toEqual({ kind: "missing" });
+    expect(heat[0].cells[12]).toEqual({ kind: "missing" }); // sampled, but the BMS sent nothing
+    expect(heat[1].cells[23]).toEqual({ kind: "temp", c: 30 });
+  });
+
+  it("today's hours after the last sample are later-today; a day before logging isn't loaded", () => {
+    expect(heat[0].cells[13]).toEqual({ kind: "future" });
+    expect(heat[2]).toMatchObject({ loaded: false, today: false });
+    expect(heat[2].cells.every((c) => c.kind === "missing")).toBe(true);
+  });
+
+  it("fill runs from faint at 20 °C to full orange at 45 °C", () => {
+    expect(tempFill(20)).toContain("#e07b39 6%");
+    expect(tempFill(32.5)).toContain("#e07b39 50%");
+    expect(tempFill(50)).toContain("#e07b39 100%");
   });
 });

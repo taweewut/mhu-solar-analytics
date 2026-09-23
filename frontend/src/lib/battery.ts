@@ -1,7 +1,9 @@
-// Battery (2b): SOC KPIs, the day × hour SOC heatmap, cycles and round-trip efficiency.
+// Battery (2b): SOC KPIs, the day × hour SOC and BMS-temperature heatmaps, cycles and
+// round-trip efficiency.
 
 import { readingsFor, type Reading } from "@/lib/energy";
-import type { FiveMinRow } from "@/lib/types";
+import { minuteOfDay } from "@/lib/format";
+import type { BmsRow, FiveMinRow } from "@/lib/types";
 
 /** First reading with PV > 50 W — "SOC at sunrise" is its SOC. null if the sun never came up. */
 export const sunriseReading = (P: Reading[]): Reading | null => P.find((p) => p.pv > 50) ?? null;
@@ -57,3 +59,46 @@ export function socHeatmap(rows: FiveMinRow[], today: string, days = 14): HeatRo
 
 /** Heatmap fill: green mixed into the background by SOC %, with a 6 % floor so 0 % stays visible. */
 export const socFill = (soc: number): string => `color-mix(in srgb, #3fa66a ${Math.max(6, soc)}%, var(--color-bg))`;
+
+export type TempCell =
+  | { kind: "temp"; c: number }
+  | { kind: "future" } // later today
+  | { kind: "missing" }; // no BMS sample that hour / day not logged
+
+export interface TempRow {
+  date: string;
+  today: boolean;
+  loaded: boolean;
+  cells: TempCell[];
+}
+
+/**
+ * Warmest BMS sensor per clock hour, last `days` days ending at `today`, newest first. The
+ * BMS log is forward-only (a live reading sampled every 15 min), so days before it are empty.
+ */
+export function tempHeatmap(rows: BmsRow[], today: string, days = 14): TempRow[] {
+  const byDay = new Map<string, BmsRow[]>();
+  for (const r of rows) {
+    const d = r.time.slice(0, 10);
+    byDay.set(d, [...(byDay.get(d) ?? []), r]);
+  }
+  return Array.from({ length: days }, (_, i) => {
+    const date = addDays(today, -i);
+    const day = byDay.get(date) ?? [];
+    const isToday = date === today;
+    const lastHour = day.length ? Math.max(...day.map((r) => Math.floor(minuteOfDay(r.time) / 60))) : -1;
+    const cells: TempCell[] = Array.from({ length: 24 }, (_, h) => {
+      const vals = day
+        .filter((r) => Math.floor(minuteOfDay(r.time) / 60) === h && r.temp_max_c != null)
+        .map((r) => r.temp_max_c!);
+      if (vals.length) return { kind: "temp", c: Math.max(...vals) };
+      if (isToday && h > lastHour) return { kind: "future" };
+      return { kind: "missing" };
+    });
+    return { date, today: isToday, loaded: day.length > 0, cells };
+  });
+}
+
+/** Temperature fill: orange mixed into the background from 20 °C (faint) to 45 °C (full). */
+export const tempFill = (c: number): string =>
+  `color-mix(in srgb, #e07b39 ${Math.round(Math.min(100, Math.max(6, ((c - 20) / 25) * 100)))}%, var(--color-bg))`;

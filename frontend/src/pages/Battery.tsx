@@ -4,22 +4,23 @@ import { KpiGrid, type Kpi } from "@/components/Kpis";
 import { withInfo } from "@/lib/kpis";
 import { PageTitle } from "@/components/ui";
 import { GridRow, Legend, Section } from "@/components/ui2";
-import { equivalentCycles, roundTrip, socFill, socHeatmap, sunriseReading } from "@/lib/battery";
+import { equivalentCycles, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap, type TempRow } from "@/lib/battery";
+import { bmsSince } from "@/lib/health";
 import type { BarGroup } from "@/lib/charts";
 import { readingsFor, sumDaily } from "@/lib/energy";
-import { dm, dmy, energyText, hm } from "@/lib/format";
+import { dm, dmy, energyText, hm, minuteOfDay } from "@/lib/format";
 import { useWidth } from "@/lib/layout";
 import type { Model } from "@/lib/model";
 import { COLORS } from "@/lib/sankey";
 import { useHome } from "@/lib/home";
 import { useTrendMode } from "@/lib/trendMode";
 import { monthSlots } from "@/lib/trends";
-import type { DailyRow, FiveMinRow } from "@/lib/types";
+import type { BmsRow, DailyRow, FiveMinRow } from "@/lib/types";
 
 const DISCHARGED = "color-mix(in srgb, #3fa66a 45%, var(--color-bg))";
 const pct = (r: number | null) => (r == null ? "—" : `${Math.round(r * 100)} %`);
 
-export function Battery({ mobile, fiveMin, daily, model }: { mobile: boolean; fiveMin: FiveMinRow[]; daily: DailyRow[]; model: Model }) {
+export function Battery({ mobile, fiveMin, daily, bms, model }: { mobile: boolean; fiveMin: FiveMinRow[]; daily: DailyRow[]; bms: BmsRow[]; model: Model }) {
   const { mode } = useTrendMode();
   const { home } = useHome();
   // This page is only offered for homes with a battery (lib/home routeAvailable).
@@ -28,6 +29,9 @@ export function Battery({ mobile, fiveMin, daily, model }: { mobile: boolean; fi
   const today = model.dates.at(-1) ?? model.asOf;
   const P = useMemo(() => readingsFor(fiveMin, today), [fiveMin, today]);
   const heat = useMemo(() => socHeatmap(fiveMin, today, 14), [fiveMin, today]);
+  const tempHeat = useMemo(() => tempHeatmap(bms, today, 14), [bms, today]);
+  const bmsFrom = useMemo(() => bmsSince(bms), [bms]);
+  const lastBms = useMemo(() => bms.reduce<BmsRow | null>((a, r) => (!a || r.time > a.time ? r : a), null), [bms]);
   const slots = useMemo(() => monthSlots(daily), [daily]);
   const life = useMemo(() => sumDaily(daily), [daily]);
   const [barsRef, barsW] = useWidth<HTMLDivElement>();
@@ -119,6 +123,43 @@ export function Battery({ mobile, fiveMin, daily, model }: { mobile: boolean; fi
         </div>
       </Section>
 
+      <Section
+        style={{ margin: `28px ${pad}px 0` }}
+        en="Battery temperature by hour"
+        th="อุณหภูมิแบตเตอรี่รายชั่วโมง (BMS) · last 14 days"
+        extra={
+          <>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+              20 °C
+              <span style={{ width: mobile ? 80 : 160, height: 10, background: `linear-gradient(90deg, ${tempFill(20)}, ${tempFill(45)})` }} />
+              45 °C
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+              <span className="hatch" style={{ width: 14, height: 10, border: "1px solid var(--color-divider)" }} />
+              Not logged
+            </span>
+          </>
+        }
+        note={
+          (lastBms?.temp_max_c != null
+            ? `Now ${lastBms.temp_min_c ?? "—"}–${lastBms.temp_max_c} °C (coolest–warmest sensor) at ${hm(minuteOfDay(lastBms.time))}. `
+            : "") +
+          `Warmest BMS sensor each hour, sampled every 15 min${bmsFrom ? ` since ${dmy(bmsFrom)}` : ""}. The BMS reading is live-only, so earlier days stay hatched. Compare with the SOC rows above: a pack that heats up while charging or discharging hard is working near its limits. LiFePO4 usually charges within 0–45 °C (check the datasheet).`
+        }
+      >
+        <div className="heatmap" role="table" aria-label="Hourly warmest battery temperature, last 14 days">
+          <span />
+          {Array.from({ length: 24 }, (_, h) => (
+            <span key={h} className="muted" style={{ fontSize: 10 }}>
+              {h % 3 === 0 ? String(h).padStart(2, "0") : ""}
+            </span>
+          ))}
+          {tempHeat.map((r) => (
+            <TempRowView key={r.date} row={r} mobile={mobile} />
+          ))}
+        </div>
+      </Section>
+
       <div className="split" style={{ margin: `28px ${pad}px 0` }}>
         <Section
           en="Charge and discharge"
@@ -178,6 +219,28 @@ function HeatRowView({ row, mobile }: { row: ReturnType<typeof socHeatmap>[numbe
           );
         if (c.kind === "future") return <div key={h} className="heat-cell" title={`${day} ${hh} · later today`} style={{ background: "var(--color-surface)" }} />;
         return <div key={h} className="heat-cell hatch" title={row.loaded ? `${day} ${hh} · no readings` : `${day} · not loaded`} />;
+      })}
+    </>
+  );
+}
+
+function TempRowView({ row, mobile }: { row: TempRow; mobile: boolean }) {
+  const day = dm(row.date);
+  return (
+    <>
+      <span style={{ fontSize: mobile ? 11 : 12, fontWeight: 600, alignSelf: "center", whiteSpace: "nowrap" }}>
+        {row.today ? (mobile ? "Today" : `${day} · today`) : day}
+      </span>
+      {row.cells.map((c, h) => {
+        const hh = `${String(h).padStart(2, "0")}:00`;
+        if (c.kind === "temp")
+          return (
+            <div key={h} className="heat-cell" title={`${day} ${hh} · warmest ${c.c} °C`} style={{ background: tempFill(c.c), color: c.c > 36 ? "#3a1a05" : "var(--color-text)" }}>
+              <span style={{ fontSize: 10, fontWeight: 600 }}>{h % 3 === 0 ? Math.round(c.c) : ""}</span>
+            </div>
+          );
+        if (c.kind === "future") return <div key={h} className="heat-cell" title={`${day} ${hh} · later today`} style={{ background: "var(--color-surface)" }} />;
+        return <div key={h} className="heat-cell hatch" title={row.loaded ? `${day} ${hh} · no sample` : `${day} · not logged`} />;
       })}
     </>
   );
