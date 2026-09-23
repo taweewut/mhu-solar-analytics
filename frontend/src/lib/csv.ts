@@ -2,7 +2,7 @@
 // src/momsolar/schema.py) onto the typed rows in lib/types.ts. bills.csv has the same
 // columns for PEA and MEA homes.
 
-import type { Bill, DailyRow, FiveMinRow, FtRate } from "@/lib/types";
+import type { Bill, BmsRow, DailyRow, FiveMinRow, FtRate } from "@/lib/types";
 
 /** Parse CSV text into rows of cells. Handles quotes, escaped quotes, CRLF and a BOM. */
 export function parseCsv(text: string): string[][] {
@@ -115,6 +115,15 @@ export const BILL_FIELDS: Record<string, keyof Bill> = {
   จำนวนเงิน: "amount_thb",
 };
 
+export const BMS_FIELDS: Record<string, keyof BmsRow> = {
+  Time: "time",
+  "Battery Temp Min(C)": "temp_min_c",
+  "Battery Temp Max(C)": "temp_max_c",
+  "Cell Min(V)": "cell_min_v",
+  "Cell Max(V)": "cell_max_v",
+  "SOC(%)": "soc_pct",
+};
+
 export const FT_FIELDS: Record<string, keyof FtRate> = {
   year: "year",
   month: "month",
@@ -124,6 +133,7 @@ export const FT_FIELDS: Record<string, keyof FtRate> = {
 
 export const parseFiveMin = (text: string) =>
   mapRecords<FiveMinRow>(text, FIVE_MIN_FIELDS, ["time", "working_state", "alarm_code"]);
+export const parseBms = (text: string) => mapRecords<BmsRow>(text, BMS_FIELDS, ["time"]);
 export const parseDaily = (text: string) => mapRecords<DailyRow>(text, DAILY_FIELDS, ["date"]);
 export const parseBills = (text: string) =>
   mapRecords<Bill>(text, BILL_FIELDS, ["bill_date"]).filter(

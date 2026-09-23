@@ -7,12 +7,12 @@ import { GridRow, Legend, Section } from "@/components/ui2";
 import { coverRange, type LineSeries } from "@/lib/charts";
 import { readingsFor } from "@/lib/energy";
 import { dm, dmy, hm, minuteOfDay } from "@/lib/format";
-import { completenessFor, healthDay, stateLog } from "@/lib/health";
+import { bmsDay, bmsSince, completenessFor, healthDay, stateLog } from "@/lib/health";
 import { useWidth } from "@/lib/layout";
 import type { Model } from "@/lib/model";
 import { COLORS } from "@/lib/sankey";
 import { useHome } from "@/lib/home";
-import type { FiveMinRow } from "@/lib/types";
+import type { BmsRow, FiveMinRow } from "@/lib/types";
 
 const addDays = (iso: string, n: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -23,8 +23,27 @@ const addDays = (iso: string, n: number) => {
 const kw = (v: number) => `${v / 1000} kW`;
 const volts = (v: number) => `${Math.round(v)} V`;
 const deg = (v: number) => `${v} °C`;
+const cellV = (v: number) => `${v.toFixed(2)} V`;
 
-export function Health({ mobile, fiveMin, model }: { mobile: boolean; fiveMin: FiveMinRow[]; model: Model }) {
+/** Hatched placeholder for a day without BMS samples (logging is forward-only). */
+function NoBms({ height, since, date }: { height: number; since: string | null; date: string }) {
+  return (
+    <div className="hatch" style={{ height, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--color-divider)" }}>
+      <div style={{ background: "var(--color-bg)", padding: "12px 16px", textAlign: "center", maxWidth: 360 }}>
+        <div style={{ fontWeight: 800, fontSize: 15 }}>No BMS samples for {dmy(date)}</div>
+        <div className="muted" style={{ fontSize: 13 }}>
+          {since && since > date
+            ? `Logging started ${dmy(since)}: the BMS reading is live-only, with no history to fetch.`
+            : since
+              ? "The scheduled fetch didn't run this day."
+              : "Not logged yet: the scheduled SolisCloud fetch (every 15 min) records it."}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveMin: FiveMinRow[]; bms: BmsRow[]; model: Model }) {
   const { home } = useHome();
   const inv = home.inverter;
   const today = model.dates.at(-1) ?? model.asOf;
@@ -32,10 +51,14 @@ export function Health({ mobile, fiveMin, model }: { mobile: boolean; fiveMin: F
   const h = useMemo(() => healthDay(fiveMin, today), [fiveMin, today]);
   const dayRows = useMemo(() => fiveMin.filter((r) => r.time.startsWith(today)), [fiveMin, today]);
   const log = useMemo(() => stateLog(dayRows), [dayRows]);
+  const b = useMemo(() => bmsDay(bms, today), [bms, today]);
+  const bmsFrom = useMemo(() => bmsSince(bms), [bms]);
   const last = P.at(-1);
   // The latest day is still in progress until its 23:55 reading arrives.
   const live = last != null && last.t < 1435;
   const nowT = live ? last!.t : null;
+  // A BMS sample can be newer than the last 5-min reading: don't shade it as "not yet".
+  const bmsNowT = nowT != null && b ? Math.max(nowT, ...b.tempMax.map(([t]) => t)) : nowT;
   const days = useMemo(
     () => Array.from({ length: 14 }, (_, i) => addDays(today, i - 13)).map((d) => completenessFor(fiveMin, d, live && d === today)),
     [fiveMin, today, live],
@@ -71,6 +94,32 @@ export function Health({ mobile, fiveMin, model }: { mobile: boolean; fiveMin: F
       temp: { ymin: tmin, ymax: tmax, series: [{ pts: P.map((p) => [p.t, p.temp]), color: "var(--color-text)" }] as LineSeries[] },
     };
   }, [P, dayRows]);
+
+  const batCharts = useMemo(() => {
+    if (!b) return null;
+    const vals = (pts: [number, number | null][]) => pts.map(([, v]) => v).filter((v): v is number => v != null);
+    const [tmin, tmax] = coverRange([...vals(b.tempMin), ...vals(b.tempMax)], 25, 40, 5);
+    const cells = [...vals(b.cellMin), ...vals(b.cellMax)];
+    const [cmin, cmax] = coverRange(cells, 3.25, 3.35, 0.05);
+    return {
+      temp: {
+        ymin: tmin,
+        ymax: tmax,
+        series: [
+          { pts: b.tempMax, color: COLORS.bat, w: 2, dots: true },
+          { pts: b.tempMin, color: COLORS.bat, w: 2, dash: "5 4", dots: true },
+        ] as LineSeries[],
+      },
+      cell: {
+        ymin: cmin,
+        ymax: cmax,
+        series: [
+          { pts: b.cellMax, color: COLORS.bat, w: 2, dots: true },
+          { pts: b.cellMin, color: COLORS.bat, w: 2, dash: "5 4", dots: true },
+        ] as LineSeries[],
+      },
+    };
+  }, [b]);
 
   if (!h) {
     return (
@@ -151,6 +200,53 @@ export function Health({ mobile, fiveMin, model }: { mobile: boolean; fiveMin: F
           <DayLineChart label="Inverter temperature" width={halfW} height={220} series={charts.temp.series} ymin={charts.temp.ymin} ymax={charts.temp.ymax} step={5} fmt={deg} nowT={nowT} />
         </Section>
       </div>
+
+      {home.battery && (
+        <div className="pair" style={{ margin: `28px ${pad}px 0` }}>
+          <Section
+            en="Battery temperature"
+            th="อุณหภูมิแบตเตอรี่ (BMS) · °C"
+            extra={
+              <>
+                <Legend color={COLORS.bat} line>Warmest</Legend>
+                <Legend color={COLORS.bat} line dashed>Coolest</Legend>
+              </>
+            }
+            note={
+              b
+                ? `BMS sensors, sampled every 15 min${bmsFrom ? ` since ${dmy(bmsFrom)}` : ""} · ${b.samples} today${b.hottest ? ` · max ${b.hottest.c} °C at ${hm(b.hottest.t)}` : ""}. LiFePO4 usually charges within 0–45 °C (check the datasheet); a pack much warmer than the room points to a hard-working or poorly ventilated battery.`
+                : "Battery temperature comes from the BMS as a live reading only, so it's logged going forward every 15 min."
+            }
+          >
+            {batCharts ? (
+              <DayLineChart label="Battery temperature" width={halfW} height={220} series={batCharts.temp.series} ymin={batCharts.temp.ymin} ymax={batCharts.temp.ymax} step={5} fmt={deg} nowT={bmsNowT} />
+            ) : (
+              <NoBms height={220} since={bmsFrom} date={today} />
+            )}
+          </Section>
+          <Section
+            en="Battery cell voltage"
+            th="แรงดันเซลล์สูงสุด/ต่ำสุด · V"
+            extra={
+              <>
+                <Legend color={COLORS.bat} line>Highest cell</Legend>
+                <Legend color={COLORS.bat} line dashed>Lowest cell</Legend>
+              </>
+            }
+            note={
+              b?.spreadMv != null
+                ? `Cell spread (highest − lowest) ${b.spreadMv} mV now, ${b.maxSpreadMv} mV at most today. A spread that keeps growing, especially near full or empty, means the cells are drifting out of balance.`
+                : "The gap between the highest and lowest cell shows how well the BMS keeps the cells balanced."
+            }
+          >
+            {batCharts ? (
+              <DayLineChart label="Battery cell voltage" width={halfW} height={220} series={batCharts.cell.series} ymin={batCharts.cell.ymin} ymax={batCharts.cell.ymax} step={0.05} fmt={cellV} nowT={bmsNowT} />
+            ) : (
+              <NoBms height={220} since={bmsFrom} date={today} />
+            )}
+          </Section>
+        </div>
+      )}
 
       <div className="pair" style={{ margin: `28px ${pad}px 0` }}>
         <Section en="Working state and alarms" th="สถานะการทำงาน · แจ้งเตือน" note="A new row appears whenever Working State or Alarm Code changes between 5-min readings.">

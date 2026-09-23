@@ -38,7 +38,7 @@ def _run() -> None:
         if client is not None:
             days, months = fetch_solis_api.incremental_plan(s.data_dir / "momhome", date.today())
             fetch_solis_api.run(
-                client, s.data_dir, days, home="momhome", log=log.info, months=months
+                client, s.data_dir, days, home="momhome", log=log.info, months=months, bms=True
             )
     except Exception:  # keep the API alive; the error lands in the server log
         log.exception("refresh failed")

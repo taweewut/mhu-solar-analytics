@@ -136,6 +136,8 @@ export interface LineSeries {
   color: string;
   w?: number;
   dash?: string;
+  /** Mark each point: for sparse samples (every 15 min), where a lone point has no line. */
+  dots?: boolean;
 }
 
 export interface LineChartInput {
@@ -159,6 +161,8 @@ export interface LineChartGeometry {
   xr: number;
   yb: number;
   paths: { d: string; color: string; w: number; dash?: string }[];
+  /** Point markers of `dots` series. */
+  marks: { x: number; y: number; color: string }[];
   yTicks: (Pos & { label: string })[];
   xTicks: (Pos & { label: string })[];
   nowX: number | null;
@@ -186,12 +190,15 @@ export function lineChart({ width: W, height: H, series, ymin, ymax, step, fmt, 
     }
     return { d, color: s.color, w: s.w ?? 2, dash: s.dash };
   });
+  const marks = series.flatMap((s) =>
+    s.dots ? s.pts.flatMap(([t, v]) => (v == null ? [] : [{ x: X(t), y: Y(v), color: s.color }])) : [],
+  );
   const yTicks: LineChartGeometry["yTicks"] = [];
   for (let v = ymin; v <= ymax + 1e-9; v += step) yTicks.push({ x: pl - 8, y: Y(v), label: fmt(v) });
   // Every 3 h; every 6 h when the plot is too narrow for nine labels (mobile).
   const hours = iw < 400 ? [0, 6, 12, 18, 24] : [0, 3, 6, 9, 12, 15, 18, 21, 24];
   const xTicks = hours.map((h) => ({ x: X(h * 60), y: H - 10, label: `${String(h).padStart(2, "0")}:00` }));
-  return { W, H, pl, pt, ih, xr: W - pr, yb: pt + ih, paths, yTicks, xTicks, nowX: nowT != null ? X(nowT) : null };
+  return { W, H, pl, pt, ih, xr: W - pr, yb: pt + ih, paths, marks, yTicks, xTicks, nowX: nowT != null ? X(nowT) : null };
 }
 
 /** Axis bounds that cover `vals` in whole `step`s, never narrower than [lo, hi]. */

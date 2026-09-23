@@ -43,6 +43,15 @@ class HomeOut(BaseModel):
     dataGaps: list[DataGap] = []
 
 
+class BmsOut(BaseModel):
+    time: str  # the inverter's reading time, local UTC+7
+    temp_min_c: float | None
+    temp_max_c: float | None
+    cell_min_v: float | None
+    cell_max_v: float | None
+    soc_pct: float | None
+
+
 class FiveMinOut(BaseModel):
     time: str  # 2026-09-23 00:03:36, local UTC+7
     working_state: str

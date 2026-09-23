@@ -12,14 +12,16 @@ export function useDataset(home: string | null) {
   const five = useQuery({ queryKey: ["5min", home], queryFn: () => data.fiveMin(home!), staleTime: STALE, enabled: on });
   const daily = useQuery({ queryKey: ["daily", home], queryFn: () => data.daily(home!), staleTime: STALE, enabled: on });
   const bills = useQuery({ queryKey: ["bills", home], queryFn: () => data.bills(home!), staleTime: STALE, enabled: on });
+  const bms = useQuery({ queryKey: ["bms", home], queryFn: () => data.bms(home!), staleTime: STALE, enabled: on });
   const ft = useQuery({ queryKey: ["ft-rates"], queryFn: data.ft, staleTime: STALE });
-  const all = [five, daily, bills, ft];
+  const all = [five, daily, bills, bms, ft];
   return {
     ready: on && all.every((q) => q.isSuccess),
     error: all.find((q) => q.error)?.error ?? null,
     fiveMin: five.data ?? [],
     daily: daily.data ?? [],
     bills: bills.data ?? [],
+    bms: bms.data ?? [],
     ft: ft.data ?? [],
   };
 }

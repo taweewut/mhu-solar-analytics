@@ -23,9 +23,13 @@ today's 5-min readings (1 call), plus yesterday and its month's daily rows only 
 yesterday is incomplete in 5min.csv / daily.csv. If the budget runs out mid-backfill, the
 days fetched so far are still written; re-run later (e.g. the next day) to continue.
 
+A routine run also logs one battery BMS sample (temperature min/max, cell voltage min/max)
+from ``inverterDetail`` into ``bms.csv``: that's a live snapshot with no history, so it's
+collected from now on by the scheduled fetch (scripts/solis_poll.sh, every 15 min).
+
 Usage::
 
-    python -m momsolar.fetch_solis_api --home momhome              # incremental (today)
+    python -m momsolar.fetch_solis_api --home momhome              # incremental (today) + BMS
     python -m momsolar.fetch_solis_api --since 2026-03-29          # every day since then
 """
 
@@ -39,7 +43,15 @@ from pathlib import Path
 from typing import Any
 
 from momsolar.fetch_solis_day import replace_days
-from momsolar.schema import DAILY_COLUMNS, DAILY_FILE, FIVE_MIN_COLUMNS, FIVE_MIN_FILE, HOMES_FILE
+from momsolar.schema import (
+    BMS_COLUMNS,
+    BMS_FILE,
+    DAILY_COLUMNS,
+    DAILY_FILE,
+    FIVE_MIN_COLUMNS,
+    FIVE_MIN_FILE,
+    HOMES_FILE,
+)
 from momsolar.sheets import fmt_num, merge, read_csv, write_csv
 from momsolar.solis_api import ROOT, QuotaExceeded, SolisApiError, SolisClient, records_of
 
@@ -144,6 +156,29 @@ def daily_from_api(records: list[dict]) -> list[dict[str, str]]:
     return sorted(out, key=lambda r: r["Time"])
 
 
+def bms_row(detail: dict) -> dict[str, str] | None:
+    """One BMS sample from ``inverterDetail``: coolest/warmest sensor and lowest/highest cell
+    across the battery packs. A BMS that isn't reporting sends 0s: those stay blank."""
+    packs = [b for b in detail.get("batteryList") or [] if isinstance(b, dict)]
+    t = detail.get("timeStr")
+    if not packs or not t:
+        return None
+
+    def pick(key: str, agg) -> str:
+        vals = [v for b in packs if (v := _f(b.get(key)))]  # 0 = not reported
+        return fmt_num(agg(vals)) if vals else ""
+
+    row = {
+        "Time": t,
+        "Battery Temp Min(C)": pick("bmsMinTemp", min),
+        "Battery Temp Max(C)": pick("bmsMaxTemp", max),
+        "Cell Min(V)": pick("bmsMinU", min),
+        "Cell Max(V)": pick("bmsMaxU", max),
+        "SOC(%)": fmt_num(_f(detail.get("batteryCapacitySoc"))),
+    }
+    return row if any(row[c] for c in BMS_COLUMNS[1:5]) else None
+
+
 def home_sn(data: Path, home: str) -> str | None:
     """The inverter serial from homes.json (git-ignored, so it stays private)."""
     path = data / HOMES_FILE
@@ -185,9 +220,11 @@ def run(
     log=print,
     months: list[str] | None = None,
     today: str | None = None,
+    bms: bool = False,
 ) -> dict[str, int]:
     """Fetch ``days`` (5-min) and ``months`` (daily rows; default: the months of the days
     fetched). Only completed days' daily rows are written — today's would be partial.
+    ``bms`` also logs one battery BMS sample (a live snapshot, so only for "now").
     Returns rows written per file."""
     sn = sn or home_sn(out, home)
     if not sn:
@@ -232,6 +269,17 @@ def run(
         rowsd = merge(read_csv(home_dir / DAILY_FILE), newd, key=lambda r: r["Time"])
         write_csv(home_dir / DAILY_FILE, DAILY_COLUMNS, rowsd)
         counts[f"{home}/{DAILY_FILE}"] = len(rowsd)
+    if bms:  # its own endpoint and budget: sample even if the 5-min fetch stopped
+        try:
+            row = bms_row(client.inverter_detail(sn) or {})
+        except QuotaExceeded as e:
+            stopped, row = stopped or e, None
+        if row:
+            rows_b = merge(read_csv(home_dir / BMS_FILE), [row], key=lambda r: r["Time"])
+            write_csv(home_dir / BMS_FILE, BMS_COLUMNS, rows_b)
+            counts[f"{home}/{BMS_FILE}"] = len(rows_b)
+            lo, hi = row["Battery Temp Min(C)"], row["Battery Temp Max(C)"]
+            log(f"bms    {row['Time']}: battery {lo}–{hi} °C")
     if stopped:
         log(f"stopped: {stopped}")
         left = [d for d in days if d not in fetched]
@@ -253,21 +301,26 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--home", default=DEFAULT_HOME, help="home id in homes.json")
     ap.add_argument("--out", type=Path, default=ROOT / "frontend" / "public" / "data")
     ap.add_argument("--sn", help="inverter serial (default: homes.json inverter.sn)")
+    ap.add_argument(
+        "--no-bms", action="store_true", help="skip the battery BMS sample (default run only)"
+    )
     when = ap.add_mutually_exclusive_group()
     when.add_argument("--date", action="append", help="YYYY-MM-DD (repeatable)")
     when.add_argument("--since", help="every day from YYYY-MM-DD to today")
     args = ap.parse_args(argv)
 
     today = date.today()
-    months = None
+    months, bms = None, False
     if args.since:
         days = day_range(args.since, today)
     elif args.date:
         days = args.date
     else:
         days, months = incremental_plan(args.out / args.home, today)
+        bms = not args.no_bms  # a live snapshot: only on the routine (now) run
     try:
-        counts = run(SolisClient.from_env(), args.out, days, args.home, args.sn, months=months)
+        client = SolisClient.from_env()
+        counts = run(client, args.out, days, args.home, args.sn, months=months, bms=bms)
     except SolisApiError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

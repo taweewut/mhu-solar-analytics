@@ -44,7 +44,7 @@ export function App() {
 
 function HomeApp({ home, route, params }: { home: Home; route: Route; params: URLSearchParams }) {
   const desktop = useMedia(DESKTOP_QUERY);
-  const { model, fiveMin, daily, bills, error } = useModel(home);
+  const { model, fiveMin, daily, bills, bms, error } = useModel(home);
   const mobile = !desktop;
   const caps = model ? capsFor(home, model.dates) : null;
   const available = !caps || routeAvailable(route, caps);
@@ -68,7 +68,7 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
   else if (route === "savings") body = <Savings mobile={mobile} model={model} bills={bills} daily={daily} />;
   else if (route === "trends") body = <Trends mobile={mobile} daily={daily} model={model} />;
   else if (route === "battery") body = <Battery mobile={mobile} fiveMin={fiveMin} daily={daily} model={model} />;
-  else body = <Health mobile={mobile} fiveMin={fiveMin} model={model} />;
+  else body = <Health mobile={mobile} fiveMin={fiveMin} bms={bms} model={model} />;
 
   const navCaps = caps ?? { fiveMin: false, battery: home.battery != null };
   return (

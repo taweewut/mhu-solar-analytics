@@ -37,6 +37,7 @@ frontend/public/data/  (git-ignored; seeded from sample_data/)
   momhome/bills.csv    PEA bills
   mhuhome/daily.csv    one row per day (Huawei → same columns; battery columns blank)
   mhuhome/bills.csv    MEA bills
+  momhome/bms.csv      battery BMS samples every 15 min (SolisCloud API, logged going forward)
 src/momsolar/
   solis_api.py         SolisCloud API client (signed requests; keys from .env)
   fetch_solis_api.py   SolisCloud API → data/<home>/ (same rows as the exports)
@@ -109,6 +110,12 @@ It runs these, which you can also run on their own:
   `python -m momsolar.solis_api probe` (saved to git-ignored `raw_api/`). Checked against the
   exports: every daily field and all 5-min power/SOC/counter fields match. The API has no alarm
   code or per-port load counters, so those are blank; the day's load total is Solis's own.
+- **Battery BMS log (Health → Battery temperature / cell voltage):** the BMS temperature
+  and cell voltages exist only as a live reading (`inverterDetail` → `batteryList`), in neither
+  the 5-min history nor the exports. So `scripts/solis_poll.sh` samples them every 15 min into
+  `<home>/bms.csv` (along with the newest 5-min readings), from the day it was installed on:
+  `scripts/install_poll.sh` sets up the launchd job (`--uninstall` removes it; log in
+  `~/Library/Logs/mhu-solar-poll.log`). ~96 calls/day per endpoint.
 - **SolisCloud rate limits:** the API document allows 2 requests/sec per endpoint; SolisCloud
   also refuses more than **200 calls per endpoint per day** (`R0000 … too many request 200
   times in 1DAYS`, undocumented). Calls are spaced 1 s apart and counted per endpoint per UTC

@@ -90,3 +90,10 @@ def test_freshness(client):
     assert body["latest_reading"] == "2026-09-23 12:17:00"
     assert body["dates"] == ["2026-09-23"] and body["refreshing"] is False
     assert client.get("/homes/mhuhome/freshness").json()["latest_day"] == "2026-08-31"
+
+
+def test_momhome_bms_samples(client):
+    rows = client.get("/homes/momhome/bms", params={"date": "2026-09-23"}).json()
+    assert len(rows) == 50 and rows[0]["time"] == "2026-09-23 00:02:00"
+    assert rows[0]["temp_min_c"] < rows[0]["temp_max_c"]
+    assert client.get("/homes/mhuhome/bms").json() == []  # no BMS log: empty, not an error

@@ -27,6 +27,9 @@ export function DayLineChart(props: LineChartInput & { label: string }) {
         {g.paths.map((p, i) => (
           <path key={i} d={p.d} fill="none" stroke={p.color} strokeWidth={p.w} strokeDasharray={p.dash} />
         ))}
+        {g.marks.map((m, i) => (
+          <circle key={`m${i}`} cx={m.x} cy={m.y} r={2} fill={m.color} />
+        ))}
         <line x1={g.pl} x2={g.xr} y1={g.yb} y2={g.yb} stroke="var(--color-text)" strokeWidth={2} />
         {future && <line x1={g.nowX!} x2={g.nowX!} y1={g.pt} y2={g.yb} stroke="var(--color-accent)" strokeWidth={2} />}
       </svg>

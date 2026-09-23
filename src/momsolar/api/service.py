@@ -10,7 +10,15 @@ import csv
 import json
 from pathlib import Path
 
-from momsolar.schema import BILLS_FILE, DAILY_FILE, FIVE_MIN_FILE, FT_COLUMNS, FT_FILE, HOMES_FILE
+from momsolar.schema import (
+    BILLS_FILE,
+    BMS_FILE,
+    DAILY_FILE,
+    FIVE_MIN_FILE,
+    FT_COLUMNS,
+    FT_FILE,
+    HOMES_FILE,
+)
 
 # CSV header → API field, in schema order.
 FIVE_MIN_FIELDS = {
@@ -65,6 +73,14 @@ BILL_FIELDS = {
     "OffPeak": "off_peak_thb",
     "จำนวนเงิน": "amount_thb",
 }
+BMS_FIELDS = {
+    "Time": "time",
+    "Battery Temp Min(C)": "temp_min_c",
+    "Battery Temp Max(C)": "temp_max_c",
+    "Cell Min(V)": "cell_min_v",
+    "Cell Max(V)": "cell_max_v",
+    "SOC(%)": "soc_pct",
+}
 TEXT_FIELDS = {"time", "working_state", "alarm_code", "date", "bill_date"}
 
 
@@ -97,6 +113,11 @@ def home_dir(data_dir: Path, home: str) -> Path | None:
 
 def five_min(home_path: Path, day: str | None = None) -> list[dict]:
     rows = _read(home_path / FIVE_MIN_FILE, FIVE_MIN_FIELDS)
+    return [r for r in rows if r["time"].startswith(day)] if day else rows
+
+
+def bms(home_path: Path, day: str | None = None) -> list[dict]:
+    rows = _read(home_path / BMS_FILE, BMS_FIELDS)
     return [r for r in rows if r["time"].startswith(day)] if day else rows
 
 

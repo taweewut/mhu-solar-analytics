@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DAY_ROWS } from "@/lib/__fixtures__/project";
 import { hm } from "@/lib/format";
-import { completeness, completenessFor, expectedReadings, healthDay, stateLog } from "@/lib/health";
+import { bmsDay, bmsSince, completeness, completenessFor, expectedReadings, healthDay, stateLog } from "@/lib/health";
+import type { BmsRow } from "@/lib/types";
 
 describe("data completeness = readings ÷ expected", () => {
   it("expects one reading per 5 min from first to last while the day is in progress", () => {
@@ -64,5 +65,35 @@ describe("state / alarm log", () => {
       ["Fault", "1010", 1],
       ["Normal", "", 2], // a blank code (Solis writes " ") is "no alarm"
     ]);
+  });
+});
+
+describe("battery BMS log", () => {
+  const b = (time: string, o: Partial<BmsRow> = {}): BmsRow => ({
+    time, temp_min_c: 31, temp_max_c: 32, cell_min_v: 3.278, cell_max_v: 3.282, soc_pct: 65, ...o,
+  });
+  const rows = [
+    b("2026-09-23 12:15:00", { temp_max_c: 34, cell_min_v: 3.3, cell_max_v: 3.312 }),
+    b("2026-09-23 12:00:00"),
+    b("2026-09-23 12:30:00", { temp_min_c: null, temp_max_c: null }),
+    b("2026-09-22 23:45:00"),
+  ];
+
+  it("one day's samples, sorted, with blanks kept as gaps (never 0)", () => {
+    const d = bmsDay(rows, "2026-09-23")!;
+    expect(d.samples).toBe(3);
+    expect(d.tempMax).toEqual([[720, 32], [735, 34], [750, null]]);
+    expect(d.hottest).toEqual({ t: 735, c: 34 });
+  });
+
+  it("cell spread = max − min cell voltage, in mV: latest and largest", () => {
+    const d = bmsDay(rows, "2026-09-23")!;
+    expect([d.spreadMv, d.maxSpreadMv]).toEqual([4, 12]);
+  });
+
+  it("a day before logging started has no data, and the log start is its first sample", () => {
+    expect(bmsDay(rows, "2026-09-01")).toBeNull();
+    expect(bmsSince(rows)).toBe("2026-09-22");
+    expect(bmsSince([])).toBeNull();
   });
 });

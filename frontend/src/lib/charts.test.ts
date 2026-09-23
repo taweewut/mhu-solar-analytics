@@ -40,6 +40,14 @@ describe("groupBars", () => {
 });
 
 describe("lineChart", () => {
+  it("marks each point of a dots series, skipping blanks (a lone 15-min sample stays visible)", () => {
+    const g = lineChart({
+      width: 616, height: 212, ymin: 0, ymax: 40, step: 10, fmt: String,
+      series: [{ pts: [[720, 32], [735, null]], color: "c", dots: true }, { pts: [[720, 20]], color: "d" }],
+    });
+    expect(g.marks).toEqual([{ x: 56 + 0.5 * 548, y: 12 + (8 / 40) * 172, color: "c" }]);
+  });
+
   it("maps 00–24 h, breaks at nulls and marks now", () => {
     const g = lineChart({ width: 1184, height: 260, series: [{ pts: [[0, 1], [60, null], [120, 2]], color: "x" }], ymin: 0, ymax: 4, step: 1, fmt: String, nowT: 738 });
     expect(g.paths[0].d.match(/M/g)).toHaveLength(2);

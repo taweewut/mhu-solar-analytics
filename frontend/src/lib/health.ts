@@ -1,9 +1,10 @@
-// Health (2c): working state, alarms, peak PV, temperature, data completeness, MPPT balance.
+// Health (2c): working state, alarms, peak PV, temperature, data completeness, MPPT balance,
+// and the battery BMS log (temperature, cell voltages).
 
 import { integrateKwh, readingsFor } from "@/lib/energy";
 import { hm, minuteOfDay } from "@/lib/format";
 import { READINGS_PER_DAY } from "@/lib/system";
-import type { FiveMinRow } from "@/lib/types";
+import type { BmsRow, FiveMinRow } from "@/lib/types";
 
 /**
  * Readings expected for a day. A finished day expects 288; the day in progress expects one
@@ -94,3 +95,50 @@ export function healthDay(rows: FiveMinRow[], date: string): HealthDay | null {
     mppt2Kwh: integrateKwh(P, (p) => p.mppt2),
   };
 }
+
+export interface BmsDay {
+  /** Samples that day, oldest first. */
+  samples: number;
+  /** [minute of day, value] per sample; null where the BMS sent nothing. */
+  tempMin: [number, number | null][];
+  tempMax: [number, number | null][];
+  cellMin: [number, number | null][];
+  cellMax: [number, number | null][];
+  /** Warmest reading that day and when. */
+  hottest: { t: number; c: number } | null;
+  /** Latest cell spread (max − min) in mV: a growing spread = cells drifting out of balance. */
+  spreadMv: number | null;
+  /** Largest cell spread that day, mV. */
+  maxSpreadMv: number | null;
+}
+
+/**
+ * One day of battery BMS samples. The BMS reading is a live snapshot (no history), logged
+ * every 15 min from the SolisCloud API, so it only exists from the day logging started.
+ */
+export function bmsDay(rows: BmsRow[], date: string): BmsDay | null {
+  const day = rows.filter((r) => r.time.startsWith(date)).sort((a, b) => a.time.localeCompare(b.time));
+  if (!day.length) return null;
+  const at = (f: (r: BmsRow) => number | null) => day.map((r) => [minuteOfDay(r.time), f(r)] as [number, number | null]);
+  let hottest: BmsDay["hottest"] = null;
+  for (const r of day) {
+    if (r.temp_max_c != null && (!hottest || r.temp_max_c > hottest.c)) hottest = { t: minuteOfDay(r.time), c: r.temp_max_c };
+  }
+  const spreads = day
+    .filter((r) => r.cell_min_v != null && r.cell_max_v != null)
+    .map((r) => Math.round((r.cell_max_v! - r.cell_min_v!) * 1000));
+  return {
+    samples: day.length,
+    tempMin: at((r) => r.temp_min_c),
+    tempMax: at((r) => r.temp_max_c),
+    cellMin: at((r) => r.cell_min_v),
+    cellMax: at((r) => r.cell_max_v),
+    hottest,
+    spreadMv: spreads.at(-1) ?? null,
+    maxSpreadMv: spreads.length ? Math.max(...spreads) : null,
+  };
+}
+
+/** "23/09/2026"-style first logged date, for "logged since …" notes. */
+export const bmsSince = (rows: BmsRow[]): string | null =>
+  rows.length ? rows.reduce((a, r) => (r.time < a ? r.time : a), rows[0].time).slice(0, 10) : null;

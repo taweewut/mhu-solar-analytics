@@ -99,6 +99,16 @@ export interface Bill {
   amount_thb: number;
 }
 
+/** A battery BMS sample (SolisCloud inverterDetail snapshot, logged every 15 min). */
+export interface BmsRow {
+  time: string; // the inverter's reading time, local UTC+7
+  temp_min_c: number | null;
+  temp_max_c: number | null;
+  cell_min_v: number | null;
+  cell_max_v: number | null;
+  soc_pct: number | null;
+}
+
 export interface FtRate {
   year: number;
   month: number;

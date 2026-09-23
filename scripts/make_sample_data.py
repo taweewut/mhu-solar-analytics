@@ -18,7 +18,7 @@ import shutil
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from momsolar.schema import BILL_COLUMNS, DAILY_COLUMNS, FIVE_MIN_COLUMNS
+from momsolar.schema import BILL_COLUMNS, BMS_COLUMNS, DAILY_COLUMNS, FIVE_MIN_COLUMNS
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "sample_data"
@@ -274,6 +274,26 @@ def momhome_five_min(rng: random.Random) -> list[dict]:
     return rows
 
 
+def momhome_bms(rng: random.Random, five_min: list[dict]) -> list[dict]:
+    """A BMS sample every 15 min (the scheduled fetch), riding the 5-min SOC."""
+    rows = []
+    for r in five_min[::3]:
+        h = int(r["Time"][11:13]) + int(r["Time"][14:16]) / 60
+        warm = 29 + 4 * max(0.0, math.sin(math.pi * (h - 8) / 12)) + rng.uniform(-0.3, 0.3)
+        cell = 3.20 + 0.0012 * float(r["SOC(%)"]) + rng.uniform(-0.004, 0.004)
+        rows.append(
+            {
+                "Time": r["Time"],
+                "Battery Temp Min(C)": round(warm - 1),
+                "Battery Temp Max(C)": round(warm),
+                "Cell Min(V)": round(cell - 0.003, 3),
+                "Cell Max(V)": round(cell + 0.003, 3),
+                "SOC(%)": r["SOC(%)"],
+            }
+        )
+    return rows
+
+
 def main() -> None:
     rng = random.Random(2026)
     for home in HOMES:
@@ -283,7 +303,9 @@ def main() -> None:
     daily, bills = momhome_daily(rng)
     write(OUT / "momhome" / "daily.csv", DAILY_COLUMNS, daily)
     write(OUT / "momhome" / "bills.csv", BILL_COLUMNS, bills)
-    write(OUT / "momhome" / "5min.csv", FIVE_MIN_COLUMNS, momhome_five_min(rng))
+    five = momhome_five_min(rng)
+    write(OUT / "momhome" / "5min.csv", FIVE_MIN_COLUMNS, five)
+    write(OUT / "momhome" / "bms.csv", BMS_COLUMNS, momhome_bms(random.Random(7), five))
 
     daily, bills = mhuhome(rng)
     write(OUT / "mhuhome" / "daily.csv", DAILY_COLUMNS, daily)

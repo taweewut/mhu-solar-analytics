@@ -6,6 +6,7 @@
       <home>/5min.csv     5-minute readings        (optional — Solis All-History only)
       <home>/daily.csv    one row per day           (Solis monthly report / Huawei reports)
       <home>/bills.csv    one row per utility bill  (PEA Log / MEA Log)
+      <home>/bms.csv      battery BMS samples       (optional — SolisCloud API snapshots)
 
 These headers are the contract between the pipeline scripts (writers), the API (reader) and
 the frontend's ``lib/csv.ts`` (reader). Header names follow the SolisCloud / PEA Log labels,
@@ -22,6 +23,7 @@ FT_FILE = "ft_rates.csv"
 FIVE_MIN_FILE = "5min.csv"
 DAILY_FILE = "daily.csv"
 BILLS_FILE = "bills.csv"
+BMS_FILE = "bms.csv"
 
 # Plant 5-min fields + the inverter fields the dashboard needs (MPPT split, SOH,
 # temperature) + the inverter's own day counters, which are more accurate than
@@ -83,6 +85,18 @@ BILL_COLUMNS = [
     "OnPeak",
     "OffPeak",
     "จำนวนเงิน",
+]
+
+# Battery BMS snapshots (SolisCloud inverterDetail → batteryList). Neither the 5-min history
+# nor the exports carry battery temperature or cell voltages, so they're logged going forward,
+# one row per sample (every 15 min by the scheduled fetch). Time = the inverter's reading time.
+BMS_COLUMNS = [
+    "Time",  # 2026-09-23 21:33:49
+    "Battery Temp Min(C)",
+    "Battery Temp Max(C)",
+    "Cell Min(V)",
+    "Cell Max(V)",
+    "SOC(%)",
 ]
 
 # Ft history (same Google Sheet); ft_rate in THB/unit. type 1 = residential.
