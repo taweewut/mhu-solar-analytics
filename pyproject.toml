@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "momsolar"
+version = "0.1.0"
+description = "MomHome solar + battery dashboard: Solis/PEA data pipeline and a read-only data API"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "taweewut", email = "taweewut@gmail.com" }]
+dependencies = [
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff>=0.4",
+]
+# HTTP API the frontend can read instead of the static CSVs. Kept optional so the
+# pipeline script stays lean: `pip install -e ".[api]"`.
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+]
+
+[project.scripts]
+fetch-solis-day = "momsolar.fetch_solis_day:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's dependency-injection idiom deliberately calls Depends()/Query() in
+# argument defaults — that's the framework's design, not a bug.
+"src/momsolar/api/**" = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

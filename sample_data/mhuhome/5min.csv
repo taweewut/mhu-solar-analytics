@@ -1,0 +1,1 @@
+Time,Working State,Alarm Code,PV(W),MPPT1(W),MPPT2(W),MPPT1(V),MPPT2(V),Battery(W),Grid(W),Grid Load(W),Backup Load(W),SOC(%),SOH(%),Temp(C),GEN(W),Smart(W),AC Coupled(W),Today Yield(kWh),Today Energy to Battery(kWh),Today Energy from Battery(kWh),Today Energy from Grid(kWh),Today Grid Load(kWh),Today Backup Load(kWh),Total Grid Load(kWh),Total Backup Load(kWh)

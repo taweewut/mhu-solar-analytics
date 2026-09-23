@@ -1,0 +1,137 @@
+/* App layer on top of modernist.css (the design system, copied as-is minus its font @import,
+   which index.html loads together with IBM Plex Sans Thai). */
+
+:root {
+  --font-body: "Archivo", "IBM Plex Sans Thai", system-ui, sans-serif;
+  --font-heading: "Archivo", "IBM Plex Sans Thai", system-ui, sans-serif;
+  --muted: color-mix(in srgb, var(--color-text) 68%, transparent);
+  --muted-72: color-mix(in srgb, var(--color-text) 72%, transparent);
+  color-scheme: light;
+}
+
+/* Dark tokens (design 1b). Applied when the system is dark unless the viewer chose light,
+   or whenever the viewer chose dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #1b1a19;
+    --color-surface: #272524;
+    --color-text: #f1efee;
+    --color-divider: color-mix(in srgb, #f1efee 30%, transparent);
+    --color-accent: #ff563c;
+    --color-neutral-100: #2d2b2b;
+    --color-neutral-800: #d7d3d3;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --color-bg: #1b1a19;
+  --color-surface: #272524;
+  --color-text: #f1efee;
+  --color-divider: color-mix(in srgb, #f1efee 30%, transparent);
+  --color-accent: #ff563c;
+  --color-neutral-100: #2d2b2b;
+  --color-neutral-800: #d7d3d3;
+  color-scheme: dark;
+}
+
+html, body { background: var(--color-bg); }
+body { font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+button { font-family: inherit; }
+
+.app { max-width: 1280px; margin: 0 auto; background: var(--color-bg); color: var(--color-text); }
+.app-desktop { padding-bottom: 40px; }
+.app-mobile { display: flex; flex-direction: column; min-height: 100dvh; }
+
+.muted { color: var(--muted); }
+.muted-72 { color: var(--muted-72); }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Labels over SVG charts: bg-coloured halo so they stay legible over ribbons. */
+.halo { text-shadow: 0 0 3px var(--color-bg), 0 0 3px var(--color-bg), 0 0 6px var(--color-bg); }
+.abs { position: absolute; white-space: nowrap; pointer-events: none; }
+
+.tooltip {
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--color-text); color: var(--color-bg);
+  box-shadow: var(--shadow-md);
+}
+
+/* Mobile bottom tab bar (design 1a/1b). */
+.tabbar {
+  position: sticky; bottom: 0; z-index: 5; margin-top: auto;
+  display: grid; grid-template-columns: repeat(6, 1fr);
+  border-top: 2px solid var(--color-divider); background: var(--color-bg);
+}
+.tab {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 10px 0 14px 10px; min-height: 56px; color: inherit; text-decoration: none;
+  border-top: 3px solid transparent; margin-top: -2px;
+}
+.tab span { font-size: 10px; }
+.tab[aria-current="page"] { color: var(--color-accent); border-top-color: var(--color-accent); }
+.tab[aria-current="page"] span { font-weight: 600; }
+
+/* KPI grid: rules come from the divider-coloured container showing through 2px gaps. */
+.kpis {
+  display: grid; gap: 2px; background: var(--color-divider);
+  border-top: 2px solid var(--color-divider); border-bottom: 2px solid var(--color-divider);
+}
+.kpi { display: flex; flex-direction: column; gap: 2px; background: var(--color-bg); min-width: 0; }
+
+/* Two-column rows on Day and Savings; stack below the full desktop width. */
+.split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+@media (min-width: 1200px) {
+  .split { grid-template-columns: 768px minmax(0, 1fr); }
+}
+
+.hscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.seg-opt { user-select: none; }
+.nav { flex-wrap: nowrap; }
+.nav a { white-space: nowrap; }
+.nav-tools { display: flex; gap: 8px; align-items: center; }
+
+.date-field { position: relative; cursor: pointer; }
+.date-field input[type="date"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  font: inherit; border: 0;
+}
+.date-field:focus-within { border-color: var(--color-accent); }
+
+.tag-button { border: 0; cursor: pointer; font: inherit; font-size: 11px; }
+.tag-button:hover { text-decoration: underline; }
+
+.recon-row {
+  display: grid; grid-template-columns: 1.4fr 0.8fr 1fr 1fr 0.9fr 1.1fr 0.8fr 0.7fr;
+  gap: 8px; padding: 8px; align-items: center; min-width: 900px;
+}
+
+.settings-grid { display: flex; flex-direction: column; gap: 14px; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.check input { accent-color: var(--color-accent); width: 16px; height: 16px; margin: 0; }
+
+.state { padding: 48px 20px; font-size: 14px; }
+
+/* "Not loaded yet" — days / months with no data are hatched, never drawn as zero (v2). */
+.hatch {
+  background: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--color-text) 12%, transparent) 4px 6px);
+}
+
+/* Two equal chart columns (Trends / Health pair rows); stacked on narrow screens. */
+.pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
+@media (min-width: 960px) {
+  .pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.heatmap { display: grid; grid-template-columns: 96px repeat(24, minmax(0, 1fr)); gap: 2px; }
+.heat-cell { height: 26px; display: flex; align-items: center; padding-left: 4px; overflow: hidden; }
+@media (max-width: 959px) {
+  .heatmap { grid-template-columns: 52px repeat(24, minmax(0, 1fr)); gap: 1px; }
+  .heat-cell { height: 18px; padding-left: 0; }
+  .heat-cell span { display: none; }
+}
+
+.table-head {
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 2px solid var(--color-divider);
+}

@@ -1,0 +1,92 @@
+[
+  {
+    "id": "momhome",
+    "name": "MomHome",
+    "subtitle": "Sample data · 7.44 kWp · 16 kWh",
+    "subtitleShort": "Sample data · 7.44 kWp",
+    "installed": "2026-03-29",
+    "kwp": 7.44,
+    "battery": {
+      "kwh": 16,
+      "label": "LiFePO4 16 kWh"
+    },
+    "inverter": {
+      "brand": "Solis",
+      "model": "S6-EH1P10K-L-PLUS",
+      "sn": null,
+      "ratedW": 10000
+    },
+    "utility": "PEA",
+    "tariff": {
+      "service": 38.22,
+      "tiers": [
+        [
+          150,
+          3.2484
+        ],
+        [
+          250,
+          4.2218
+        ],
+        [
+          null,
+          4.4217
+        ]
+      ],
+      "touOn": null,
+      "touOff": null
+    },
+    "exportRate": 0,
+    "meterNetsExport": false,
+    "systemCost": 250000,
+    "systemCostPlaceholder": true,
+    "dataGaps": []
+  },
+  {
+    "id": "mhuhome",
+    "name": "MhuHome",
+    "subtitle": "Sample data · Huawei · 5 kWp · no battery · MEA",
+    "subtitleShort": "Huawei · 5 kWp · MEA",
+    "installed": "2020-09-20",
+    "kwp": 5,
+    "battery": null,
+    "inverter": {
+      "brand": "Huawei",
+      "model": null,
+      "sn": null,
+      "ratedW": null
+    },
+    "utility": "MEA",
+    "tariff": {
+      "service": 24.62,
+      "tiers": [
+        [
+          150,
+          3.2484
+        ],
+        [
+          250,
+          4.2218
+        ],
+        [
+          null,
+          4.4217
+        ]
+      ],
+      "touOn": 5.7982,
+      "touOff": 2.6369
+    },
+    "exportRate": 0,
+    "meterNetsExport": true,
+    "systemCost": 200000,
+    "systemCostPlaceholder": false,
+    "dataGaps": [
+      {
+        "from": "2025-10-31",
+        "to": "2026-02-15",
+        "reason": "Inverter offline (no cloud connection)",
+        "reasonTh": "อินเวอร์เตอร์ขาดการเชื่อมต่อคลาวด์"
+      }
+    ]
+  }
+]
