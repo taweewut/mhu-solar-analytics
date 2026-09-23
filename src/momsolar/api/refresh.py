@@ -1,5 +1,5 @@
 """Background data refresh: re-import every home's raw exports into the data folder, then
-pull MomHome's last two days from the SolisCloud API when its keys are set.
+pull MomHome's newest readings from the SolisCloud API (budgeted) when its keys are set.
 
 Single-flight — a second POST /refresh while one is running is a no-op.
 """
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import date, timedelta
+from datetime import date
 
 from fastapi import BackgroundTasks
 
@@ -36,9 +36,10 @@ def _run() -> None:
         except SolisApiError:
             client = None  # no API keys: exports only
         if client is not None:
-            today = date.today()
-            days = [(today - timedelta(days=1)).isoformat(), today.isoformat()]
-            fetch_solis_api.run(client, s.data_dir, days, home="momhome", log=log.info)
+            days, months = fetch_solis_api.incremental_plan(s.data_dir / "momhome", date.today())
+            fetch_solis_api.run(
+                client, s.data_dir, days, home="momhome", log=log.info, months=months
+            )
     except Exception:  # keep the API alive; the error lands in the server log
         log.exception("refresh failed")
     finally:

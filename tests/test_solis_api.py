@@ -78,3 +78,36 @@ def test_post_raises_on_an_api_error(monkeypatch):
     monkeypatch.setattr(s.urllib.request, "urlopen", fake_urlopen(bad, []))
     with pytest.raises(s.SolisApiError, match="Z0001 sign error"):
         s.SolisClient("id", "secret").stations()
+
+
+def test_usage_budget_slows_down_then_stops_and_persists(tmp_path, monkeypatch):
+    monkeypatch.setattr(s, "utc_day", lambda: "2026-09-23")
+    u = s.Usage(tmp_path / "usage.json", budget=10)
+    for _ in range(7):
+        u.record("/v1/api/inverterDay")
+    assert u.interval("/v1/api/inverterDay") == s.MIN_INTERVAL
+    u.record("/v1/api/inverterDay")  # 8 of 10: past 80 %
+    assert u.interval("/v1/api/inverterDay") == s.SLOW_INTERVAL
+    assert u.interval("/v1/api/inverterMonth") == s.MIN_INTERVAL  # budgets are per endpoint
+    u.record("/v1/api/inverterDay")
+    u.record("/v1/api/inverterDay")
+    with pytest.raises(s.QuotaExceeded, match="10/10"):
+        u.interval("/v1/api/inverterDay")
+    again = s.Usage(tmp_path / "usage.json", budget=10)  # another run shares the count
+    assert again.calls("/v1/api/inverterDay") == 10
+    monkeypatch.setattr(s, "utc_day", lambda: "2026-09-24")
+    assert again.calls("/v1/api/inverterDay") == 0  # new UTC day
+
+
+def test_too_many_requests_blocks_until_the_next_utc_day(monkeypatch, tmp_path):
+    monkeypatch.setattr(s, "utc_day", lambda: "2026-09-23")
+    msg = "No authority too many request 200 times in 1DAYS"
+    reply = {"success": False, "code": "R0000", "msg": msg, "data": None}
+    monkeypatch.setattr(s.urllib.request, "urlopen", fake_urlopen(reply, []))
+    c = s.SolisClient("id", "secret", usage=s.Usage(tmp_path / "u.json"))
+    with pytest.raises(s.QuotaExceeded, match="R0000"):
+        c.inverter_day("SN", "2026-09-23")
+    with pytest.raises(s.QuotaExceeded, match="after 00:00 UTC"):
+        c.inverter_month("SN", "2026-09")  # no request sent
+    monkeypatch.setattr(s, "utc_day", lambda: "2026-09-24")
+    assert c.usage.interval("/v1/api/inverterDay") == s.MIN_INTERVAL

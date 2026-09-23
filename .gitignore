@@ -18,3 +18,4 @@ docs/v2-compare/
 
 # SolisCloud API replies (real data)
 raw_api/
+.solis_usage.json

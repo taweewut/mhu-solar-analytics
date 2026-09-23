@@ -102,12 +102,21 @@ It runs these, which you can also run on their own:
 
 - **SolisCloud API (MomHome):** with `MOMSOLAR_SOLIS_KEY_ID` / `MOMSOLAR_SOLIS_KEY_SECRET`
   in `.env` (SolisCloud → Account → Basic Settings → API Management), `refresh_all.sh` and
-  `POST /refresh` also pull the last two days: 5-min readings (`inverterDay`) and that month's
-  daily rows (`inverterMonth`), merged exactly like the exports. Backfill with
+  `POST /refresh` also pull the newest readings: 5-min (`inverterDay`) and daily rows
+  (`inverterMonth`), merged exactly like the exports. A routine run is incremental: 1 call for
+  today, plus yesterday's day/month only while they're incomplete. Backfill with
   `.venv/bin/python -m momsolar.fetch_solis_api --since 2026-03-29`; inspect raw replies with
   `python -m momsolar.solis_api probe` (saved to git-ignored `raw_api/`). Checked against the
   exports: every daily field and all 5-min power/SOC/counter fields match. The API has no alarm
   code or per-port load counters, so those are blank; the day's load total is Solis's own.
+- **SolisCloud rate limits:** the API document allows 2 requests/sec per endpoint; SolisCloud
+  also refuses more than **200 calls per endpoint per day** (`R0000 … too many request 200
+  times in 1DAYS`, undocumented). Calls are spaced 1 s apart and counted per endpoint per UTC
+  day in `.solis_usage.json` (git-ignored). After 80 % of the budget (`MOMSOLAR_SOLIS_DAILY_BUDGET`,
+  default 180) calls slow to one per 5 s; at the budget they stop, keeping what was fetched;
+  an R0000 blocks all calls until 00:00 UTC (07:00 Thailand). A backfill is 1 call per day, so
+  more than ~180 days needs two runs on different days. Refreshing every 10 minutes uses
+  ~150 calls/day.
 - **Files are recognised by their header row, not their name.** SolisCloud reuses
   "Inverter History Report_…" for different exports, and FusionSolar has used three names for
   the same report. Anything else in the folders (plant reports, a Power BI export) is skipped.

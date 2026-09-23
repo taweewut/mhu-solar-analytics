@@ -6,6 +6,7 @@ import csv
 import json
 
 from momsolar import fetch_solis_api as f
+from momsolar.solis_api import QuotaExceeded
 
 
 def reading(t, **kw):
@@ -83,27 +84,80 @@ def test_daily_mapping_and_energy_units():
 
 
 class FakeClient:
-    def __init__(self):
+    def __init__(self, quota_after=None):
         self.calls = []
+        self.quota_after = quota_after
+
+    def _call(self, *call):
+        if self.quota_after is not None and len(self.calls) >= self.quota_after:
+            raise QuotaExceeded("budget used")
+        self.calls.append(call)
 
     def inverter_day(self, sn, day):
-        self.calls.append(("day", sn, day))
+        self._call("day", sn, day)
         return [reading("12:00:00") | {"timeStr": f"{day} 12:00:00"}]
 
     def inverter_month(self, sn, month):
-        self.calls.append(("month", sn, month))
-        return [{"dateStr": f"{month}-01", "energy": 20, "energyStr": "kWh"}]
+        self._call("month", sn, month)
+        return [
+            {"dateStr": f"{month}-22", "energy": 20, "energyStr": "kWh"},
+            {"dateStr": f"{month}-23", "energy": 5, "energyStr": "kWh"},  # today: partial
+        ]
 
 
-def test_run_merges_into_the_home_csvs_using_the_serial_from_homes_json(tmp_path):
+def home(tmp_path, five_min="Time,PV(W)\n", daily="Time\n"):
     (tmp_path / "homes.json").write_text(json.dumps([{"id": "h", "inverter": {"sn": "SN1"}}]))
-    home = tmp_path / "h"
-    home.mkdir()
-    (home / "5min.csv").write_text("Time,PV(W)\n2026-09-22 12:00:00,5\n2026-09-23 08:00:00,1\n")
+    d = tmp_path / "h"
+    d.mkdir()
+    (d / "5min.csv").write_text(five_min)
+    (d / "daily.csv").write_text(daily)
+    return d
+
+
+def times(path):
+    with path.open() as fh:
+        return [r["Time"] for r in csv.DictReader(fh)]
+
+
+def test_run_merges_and_skips_todays_partial_daily_row(tmp_path):
+    d = home(tmp_path, "Time,PV(W)\n2026-09-21 12:00:00,5\n2026-09-22 08:00:00,1\n")
     client = FakeClient()
-    counts = f.run(client, tmp_path, ["2026-09-23"], home="h", log=lambda *_: None)
-    assert counts == {"h/5min.csv": 2, "h/daily.csv": 1}
-    assert client.calls == [("day", "SN1", "2026-09-23"), ("month", "SN1", "2026-09")]
-    with (home / "5min.csv").open() as fh:
-        times = [r["Time"] for r in csv.DictReader(fh)]
-    assert times == ["2026-09-22 12:00:00", "2026-09-23 12:00:00"]  # the fetched day replaced
+    counts = f.run(
+        client,
+        tmp_path,
+        ["2026-09-22", "2026-09-23"],
+        home="h",
+        log=lambda *_: None,
+        today="2026-09-23",
+    )
+    assert counts == {"h/5min.csv": 3, "h/daily.csv": 1}
+    assert client.calls == [
+        ("day", "SN1", "2026-09-22"),
+        ("day", "SN1", "2026-09-23"),
+        ("month", "SN1", "2026-09"),  # for the completed 22nd; serial from homes.json
+    ]
+    assert times(d / "5min.csv") == [
+        "2026-09-21 12:00:00",
+        "2026-09-22 12:00:00",
+        "2026-09-23 12:00:00",
+    ]  # the fetched 22nd replaced the old one
+    assert times(d / "daily.csv") == ["2026-09-22"]  # not the partial 23rd
+
+
+def test_a_quota_stop_keeps_the_days_already_fetched(tmp_path):
+    d = home(tmp_path)
+    log = []
+    days = ["2026-09-20", "2026-09-21", "2026-09-22"]
+    f.run(FakeClient(quota_after=2), tmp_path, days, home="h", log=log.append, today="2026-09-23")
+    assert times(d / "5min.csv") == ["2026-09-20 12:00:00", "2026-09-21 12:00:00"]
+    assert any("not fetched: 2026-09-22" in line for line in log)
+
+
+def test_incremental_plan_fetches_yesterday_only_while_incomplete(tmp_path):
+    d = home(tmp_path, "Time,PV(W)\n2026-09-22 23:58:36,0\n", "Time\n2026-09-22\n")
+    today = f.date(2026, 9, 23)
+    assert f.incremental_plan(d, today) == (["2026-09-23"], [])  # 1 call
+    (d / "daily.csv").write_text("Time\n2026-09-21\n")
+    assert f.incremental_plan(d, today) == (["2026-09-23"], ["2026-09"])
+    (d / "5min.csv").write_text("Time,PV(W)\n2026-09-22 18:00:00,0\n")
+    assert f.incremental_plan(d, today) == (["2026-09-22", "2026-09-23"], ["2026-09"])

@@ -18,9 +18,14 @@ is a total (``homeLoadTodayEnergy``): Today Grid Load is integrated from the gri
 load power (``familyLoadPower``) and Today Backup Load is the rest, so the total stays
 Solis's own.
 
+Calls are budgeted (see :mod:`momsolar.solis_api`), so a default run is incremental:
+today's 5-min readings (1 call), plus yesterday and its month's daily rows only while
+yesterday is incomplete in 5min.csv / daily.csv. If the budget runs out mid-backfill, the
+days fetched so far are still written; re-run later (e.g. the next day) to continue.
+
 Usage::
 
-    python -m momsolar.fetch_solis_api --home momhome              # today + yesterday
+    python -m momsolar.fetch_solis_api --home momhome              # incremental (today)
     python -m momsolar.fetch_solis_api --since 2026-03-29          # every day since then
 """
 
@@ -36,7 +41,7 @@ from typing import Any
 from momsolar.fetch_solis_day import replace_days
 from momsolar.schema import DAILY_COLUMNS, DAILY_FILE, FIVE_MIN_COLUMNS, FIVE_MIN_FILE, HOMES_FILE
 from momsolar.sheets import fmt_num, merge, read_csv, write_csv
-from momsolar.solis_api import ROOT, SolisApiError, SolisClient, records_of
+from momsolar.solis_api import ROOT, QuotaExceeded, SolisApiError, SolisClient, records_of
 
 DEFAULT_HOME = "momhome"
 STATES = {1: "Normal", 2: "Offline", 3: "Alarm"}
@@ -154,6 +159,23 @@ def months_of(days: list[str]) -> list[str]:
     return sorted({d[:7] for d in days})
 
 
+COMPLETE_FROM = "23:50"  # a day whose 5-min data reaches this is complete
+
+
+def incremental_plan(home_dir: Path, today: date) -> tuple[list[str], list[str]]:
+    """(days for 5-min, months for daily rows) a routine refresh needs: today's readings,
+    plus yesterday's 5-min data and/or its daily row only while they're still missing."""
+    y = (today - timedelta(days=1)).isoformat()
+    last_y = max(
+        (r["Time"] for r in read_csv(home_dir / FIVE_MIN_FILE) if r["Time"][:10] == y),
+        default="",
+    )
+    y_done = last_y[11:16] >= COMPLETE_FROM
+    has_daily = any(r["Time"] == y for r in read_csv(home_dir / DAILY_FILE))
+    days = [today.isoformat()] if y_done else [y, today.isoformat()]
+    return days, [] if y_done and has_daily else [y[:7]]
+
+
 def run(
     client: SolisClient,
     out: Path,
@@ -161,8 +183,12 @@ def run(
     home: str = DEFAULT_HOME,
     sn: str | None = None,
     log=print,
+    months: list[str] | None = None,
+    today: str | None = None,
 ) -> dict[str, int]:
-    """Fetch ``days`` (5-min) and their months (daily); returns rows written per file."""
+    """Fetch ``days`` (5-min) and ``months`` (daily rows; default: the months of the days
+    fetched). Only completed days' daily rows are written — today's would be partial.
+    Returns rows written per file."""
     sn = sn or home_sn(out, home)
     if not sn:
         inverters = records_of(client.inverters())
@@ -171,26 +197,46 @@ def run(
         sn = inverters[0]["sn"]
     home_dir = out / home
     counts: dict[str, int] = {}
+    today = today or date.today().isoformat()
 
     new5: list[dict] = []
+    fetched: list[str] = []
+    stopped: QuotaExceeded | None = None
     for d in days:
-        rows = five_min_from_api(client.inverter_day(sn, d) or [])
+        try:
+            rows = five_min_from_api(client.inverter_day(sn, d) or [])
+        except QuotaExceeded as e:
+            stopped = e
+            break
         log(f"5-min  {d}: {len(rows)} rows")
         new5 += rows
+        fetched.append(d)
     if new5:
         rows5 = replace_days(read_csv(home_dir / FIVE_MIN_FILE), new5)
         write_csv(home_dir / FIVE_MIN_FILE, FIVE_MIN_COLUMNS, rows5)
         counts[f"{home}/{FIVE_MIN_FILE}"] = len(rows5)
 
+    wanted = months_of([d for d in fetched if d < today]) if months is None else months
     newd: list[dict] = []
-    for m in months_of(days):
-        rows = daily_from_api(client.inverter_month(sn, m) or [])
+    for m in [] if stopped else wanted:
+        try:
+            rows = [
+                r for r in daily_from_api(client.inverter_month(sn, m) or []) if r["Time"] < today
+            ]
+        except QuotaExceeded as e:
+            stopped = e
+            break
         log(f"daily  {m}: {len(rows)} days")
         newd += rows
     if newd:
         rowsd = merge(read_csv(home_dir / DAILY_FILE), newd, key=lambda r: r["Time"])
         write_csv(home_dir / DAILY_FILE, DAILY_COLUMNS, rowsd)
         counts[f"{home}/{DAILY_FILE}"] = len(rowsd)
+    if stopped:
+        log(f"stopped: {stopped}")
+        left = [d for d in days if d not in fetched]
+        if left:
+            log(f"not fetched: {left[0]} … {left[-1]} ({len(left)} days); re-run later")
     return counts
 
 
@@ -213,12 +259,15 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     today = date.today()
+    months = None
     if args.since:
         days = day_range(args.since, today)
+    elif args.date:
+        days = args.date
     else:
-        days = args.date or [(today - timedelta(days=1)).isoformat(), today.isoformat()]
+        days, months = incremental_plan(args.out / args.home, today)
     try:
-        counts = run(SolisClient.from_env(), args.out, days, args.home, args.sn)
+        counts = run(SolisClient.from_env(), args.out, days, args.home, args.sn, months=months)
     except SolisApiError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
