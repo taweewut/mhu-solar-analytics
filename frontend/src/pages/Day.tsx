@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { DayPowerChart } from "@/components/DayPowerChart";
+import { daylight } from "@/lib/battery";
 import { Calendar, ChevronLeft, ChevronRight } from "@/components/Icons";
 import { Sankey } from "@/components/Sankey";
 import { Dot, PageTitle, SectionTitle, Swatch } from "@/components/ui";
@@ -26,6 +27,9 @@ export function Day({ mobile, fiveMin, model, date: requested }: Props) {
   const go = (d: string) => navigate("day", d === today ? undefined : { d });
 
   const P = useMemo(() => readingsFor(fiveMin, date), [fiveMin, date]);
+  // That day's own sunrise / sunset once it's over; while it's in progress (or had no sun),
+  // the median of the 14 days before it.
+  const sun = useMemo(() => daylight(fiveMin, date, 1) ?? daylight(fiveMin, date, 14), [fiveMin, date]);
   const totals = useMemo(() => dayTotals(fiveMin, date), [fiveMin, date]);
   const stats = useMemo(() => dayStats(P), [P]);
   const flows = useMemo(() => (totals ? flowsFrom(totals, "stored", daySplit(totals)) : null), [totals]);
@@ -102,7 +106,7 @@ export function Day({ mobile, fiveMin, model, date: requested }: Props) {
 
       <div ref={chartRef} style={{ margin: `8px ${pad}px 0` }}>
         {P.length ? (
-          <DayPowerChart P={P} date={date} width={chartW} height={mobile ? 280 : 340} live={isToday} />
+          <DayPowerChart P={P} date={date} width={chartW} height={mobile ? 280 : 340} live={isToday} daylight={sun} />
         ) : (
           <div className="state muted">No 5-minute data for {dmy(date)}. Export the inverter history for that day and run fetch_solis_day.py.</div>
         )}

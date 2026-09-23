@@ -10,7 +10,8 @@ export const SUN_BG = `color-mix(in srgb, ${COLORS.pv} 20%, var(--color-bg))`;
 export const MOON = "#5b6ea8";
 export const MOON_BG = `color-mix(in srgb, ${MOON} 16%, var(--color-bg))`;
 
-export const sunTitle = (d: Daylight) => `Sun up ${hm(d.rise)}–${hm(d.set)} (median of ${d.days} days): PV charges the battery`;
+export const sunTitle = (d: Daylight) =>
+  `Sun up ${hm(d.rise)}–${hm(d.set)} (${d.days === 1 ? "this day" : `median of ${d.days} days`}): PV charges the battery`;
 export const MOON_TITLE = "Night: the battery discharges to run the house";
 
 export function BandIcon({ sun }: { sun: boolean }) {
