@@ -15,3 +15,6 @@ frontend/.env.local
 frontend/public/data/
 raw_samples/
 docs/v2-compare/
+
+# SolisCloud API replies (real data)
+raw_api/
