@@ -354,3 +354,30 @@ export function nodeTip(layout: SankeyLayout, node: LaidNode, utility = "PEA"): 
 
 /** Ribbon opacity while a node is hovered: its own flows stand out. */
 export const nodeLinkOpacity = (link: LinkSpec, node: NodeKey): number => (link.s === node || link.t === node ? 0.95 : 0.15);
+
+const SHORT: Record<NodeKey, string> = {
+  pv: "Solar",
+  grid: "Grid",
+  bat: "Battery",
+  home: "Home",
+  export: "Export",
+  loss: "Losses",
+  stored: "Stored",
+};
+
+/**
+ * Legend text for the dashed lines: which paths carried 0 kWh in this period, or null when
+ * none did. Grid → Battery says why it's always 0 (Solis doesn't split charging by source).
+ */
+export function zeroLegend(layout: Pick<SankeyLayout, "zeros">): string | null {
+  if (!layout.zeros.length) return null;
+  const isGridBat = (z: { s: NodeKey; t: NodeKey }) => z.s === "grid" && z.t === "bat";
+  const others = layout.zeros.filter((z) => !isGridBat(z)).map((z) => `${SHORT[z.s]} → ${SHORT[z.t]}`);
+  const gridBat = layout.zeros.some(isGridBat);
+  const why = "the inverter doesn't report grid charging separately, so it's shown as 0";
+  if (!others.length) return `Dashed line = 0 kWh: Grid → Battery (${why}).`;
+  return (
+    `Dashed = 0 kWh in this period, the path exists but nothing flowed: ${others.join(", ")}` +
+    (gridBat ? `, and Grid → Battery (${why}).` : ".")
+  );
+}

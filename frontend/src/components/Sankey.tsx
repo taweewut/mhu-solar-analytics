@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from "react";
 import { useHome } from "@/lib/home";
-import { layoutSankey, linkOpacity, linkTip, NODE_TIP_WIDTH, nodeLinkOpacity, nodeTip, type Flows, type NodeKey } from "@/lib/sankey";
+import { layoutSankey, linkOpacity, linkTip, NODE_TIP_WIDTH, nodeLinkOpacity, nodeTip, zeroLegend, type Flows, type NodeKey } from "@/lib/sankey";
 import { useSettings } from "@/lib/settings";
 
 // Type scale per placement: mobile overview (1a/1b), desktop overview (1c), day view (1d).
@@ -39,6 +39,7 @@ export function Sankey({ flows, width, height, variant }: Props) {
   const ntip = hoveredNode ? nodeTip(layout, hoveredNode, home.utility) : null;
   const opacity = (l: (typeof layout.links)[number]) =>
     hoveredNode ? nodeLinkOpacity(l, hoveredNode.key) : linkOpacity(l.i, hoveredLink ? hoveredLink.i : null);
+  const zeroText = zeroLegend(layout);
   // Tap on touch screens: same highlight; tapping the same thing again clears it.
   const toggle = (h: NonNullable<Hover>) => setHov((cur) => (JSON.stringify(cur) === JSON.stringify(h) ? null : h));
 
@@ -112,6 +113,12 @@ export function Sankey({ flows, width, height, variant }: Props) {
           </div>
         </div>
       ))}
+      {zeroText && (
+        <div className="muted" style={{ marginTop: 10, display: "flex", alignItems: "flex-start", gap: 8, fontSize: v.sub + 1, lineHeight: 1.4 }}>
+          <span style={{ flex: "none", width: 18, marginTop: "0.7em", borderTop: "2px dashed #3a7bd5" }} />
+          <span>{zeroText}</span>
+        </div>
+      )}
       {tip && (
         <div className="abs" style={{ left: tip.left, top: tip.top, zIndex: 2 }}>
           <div className="tooltip" style={{ padding: v.tipPad, fontSize: v.tipFont }}>

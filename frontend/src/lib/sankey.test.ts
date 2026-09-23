@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { layoutSankey, linkOpacity, linksFor, linkTip, nodeLinkOpacity, nodeTip, type Flows } from "@/lib/sankey";
+import { layoutSankey, linkOpacity, linksFor, linkTip, nodeLinkOpacity, nodeTip, zeroLegend, type Flows } from "@/lib/sankey";
 
 // Sample flows from the design handoff (README "Sample flows").
 const TODAY: Flows = { pvHome: 2.6, pvBat: 10.7, pvLoss: 1.3, batHome: 4.6, stored: 6.1, gridHome: 0.1, gridBat: 0, sub: "Backup 7.2 · Grid-load 0.1" };
@@ -161,5 +161,19 @@ describe("node explanations", () => {
     const pvHome = l.links.find((x) => x.s === "pv" && x.t === "home")!;
     expect(nodeLinkOpacity(pvHome, "home")).toBe(0.95);
     expect(nodeLinkOpacity(pvHome, "bat")).toBe(0.15);
+  });
+});
+
+describe("dashed-line legend", () => {
+  it("names the 0 kWh paths and why Grid → Battery is always 0", () => {
+    const text = zeroLegend(layoutSankey(TODAY, { width: 1184, height: 400 }))!;
+    expect(text).toBe("Dashed line = 0 kWh: Grid → Battery (the inverter doesn't report grid charging separately, so it's shown as 0).");
+  });
+
+  it("lists every zero path, and is null when nothing is dashed", () => {
+    const noGrid = zeroLegend(layoutSankey({ ...MONTH, gridHome: 0 }, { width: 1184, height: 400 }))!;
+    expect(noGrid).toMatch(/nothing flowed: Grid → Home, and Grid → Battery \(/);
+    const F: Flows = { pvHome: 4.3, pvBat: 0, pvLoss: 0, gridHome: 7.3, gridBat: 0, batHome: 0, batLoss: 0, pvExport: 11.9, battery: false };
+    expect(zeroLegend(layoutSankey(F, { width: 1184, height: 400 }))).toBeNull();
   });
 });
