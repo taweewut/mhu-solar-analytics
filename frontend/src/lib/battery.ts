@@ -57,6 +57,44 @@ export function socHeatmap(rows: FiveMinRow[], today: string, days = 14): HeatRo
   });
 }
 
+export interface Daylight {
+  /** Median minute of day of the first / last reading with PV > 50 W. */
+  rise: number;
+  set: number;
+  /** Days it's based on. */
+  days: number;
+  /** Heatmap columns: night [0, fromHour), day [fromHour, toHour), night [toHour, 24). */
+  fromHour: number;
+  toHour: number;
+}
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+};
+
+/**
+ * When the sun is up (the battery charges) over the last `days` days: the median sunrise and
+ * sunset seen in the data — first and last reading with PV > 50 W — not an almanac. An hour
+ * column counts as day when most of it is between them. Today counts only once past sunset.
+ */
+export function daylight(rows: FiveMinRow[], today: string, days = 14): Daylight | null {
+  const rise: number[] = [];
+  const set: number[] = [];
+  for (let i = 0; i < days; i++) {
+    const P = readingsFor(rows, addDays(today, -i));
+    const lit = P.filter((p) => p.pv > 50);
+    if (!lit.length || P[P.length - 1].pv > 50) continue; // no sun, or the day isn't over yet
+    rise.push(lit[0].t);
+    set.push(lit[lit.length - 1].t);
+  }
+  if (!rise.length) return null;
+  const r = median(rise);
+  const st = median(set);
+  return { rise: r, set: st, days: rise.length, fromHour: Math.round(r / 60), toHour: Math.round(st / 60) };
+}
+
 /** Heatmap fill: green mixed into the background by SOC %, with a 6 % floor so 0 % stays visible. */
 export const socFill = (soc: number): string => `color-mix(in srgb, #3fa66a ${Math.max(6, soc)}%, var(--color-bg))`;
 

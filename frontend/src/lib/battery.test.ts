@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DAY_ROWS, PROJECT_DAILY } from "@/lib/__fixtures__/project";
-import { equivalentCycles, hourlySoc, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap } from "@/lib/battery";
+import { daylight, equivalentCycles, hourlySoc, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap } from "@/lib/battery";
 import type { BmsRow } from "@/lib/types";
 import { readingsFor, sumDaily } from "@/lib/energy";
 import { hm } from "@/lib/format";
@@ -103,5 +103,28 @@ describe("battery temperature heatmap (BMS log, forward-only)", () => {
     expect(tempFill(20)).toContain("#e07b39 6%");
     expect(tempFill(32.5)).toContain("#e07b39 50%");
     expect(tempFill(50)).toContain("#e07b39 100%");
+  });
+});
+
+describe("daylight (sun / moon strip over the heatmaps)", () => {
+  const day = (date: string, from: number, to: number, lastT = 1435) =>
+    Array.from({ length: Math.floor(lastT / 5) + 1 }, (_, i) => {
+      const t = i * 5;
+      const hh = String(Math.floor(t / 60)).padStart(2, "0");
+      const mm = String(t % 60).padStart(2, "0");
+      return { ...DAY_ROWS[0], time: `${date} ${hh}:${mm}:00`, pv_w: t >= from && t <= to ? 1000 : 0, mppt1_w: 0, mppt2_w: 0 };
+    });
+
+  it("median first / last PV > 50 W over finished days, rounded to hour columns", () => {
+    const rows = [...day("2026-09-21", 370, 1080), ...day("2026-09-22", 380, 1070), ...day("2026-09-20", 360, 1090)];
+    const d = daylight(rows, "2026-09-22", 3)!;
+    expect([hm(d.rise), hm(d.set), d.days]).toEqual(["06:10", "18:00", 3]);
+    expect([d.fromHour, d.toHour]).toEqual([6, 18]);
+  });
+
+  it("skips today while the sun is still up, and returns null without any sunny day", () => {
+    const rows = [...day("2026-09-22", 380, 1070), ...day("2026-09-23", 300, 900, 720)];
+    expect(daylight(rows, "2026-09-23", 2)!.days).toBe(1);
+    expect(daylight([], "2026-09-23")).toBeNull();
   });
 });

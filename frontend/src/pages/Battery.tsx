@@ -4,7 +4,8 @@ import { KpiGrid, type Kpi } from "@/components/Kpis";
 import { withInfo } from "@/lib/kpis";
 import { PageTitle } from "@/components/ui";
 import { GridRow, Legend, Section } from "@/components/ui2";
-import { equivalentCycles, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap, type TempRow } from "@/lib/battery";
+import { daylight, equivalentCycles, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap, type Daylight, type TempRow } from "@/lib/battery";
+import { Moon, Sun } from "@/components/Icons";
 import { bmsSince } from "@/lib/health";
 import type { BarGroup } from "@/lib/charts";
 import { readingsFor, sumDaily } from "@/lib/energy";
@@ -30,6 +31,7 @@ export function Battery({ mobile, fiveMin, daily, bms, model }: { mobile: boolea
   const P = useMemo(() => readingsFor(fiveMin, today), [fiveMin, today]);
   const heat = useMemo(() => socHeatmap(fiveMin, today, 14), [fiveMin, today]);
   const tempHeat = useMemo(() => tempHeatmap(bms, today, 14), [bms, today]);
+  const sun = useMemo(() => daylight(fiveMin, today, 14), [fiveMin, today]);
   const bmsFrom = useMemo(() => bmsSince(bms), [bms]);
   const lastBms = useMemo(() => bms.reduce<BmsRow | null>((a, r) => (!a || r.time > a.time ? r : a), null), [bms]);
   const slots = useMemo(() => monthSlots(daily), [daily]);
@@ -82,7 +84,11 @@ export function Battery({ mobile, fiveMin, daily, bms, model }: { mobile: boolea
       ? `Only ${dmy(loaded[0].date)} is loaded. Earlier rows fill in when the daily 5-min backfill runs. `
       : loaded.length < heat.length
         ? `${loaded.length} of ${heat.length} days loaded; hatched days fill in when the 5-min backfill runs. `
-        : "") + "Look for the morning low point: how close the battery gets to empty before sunrise.";
+        : "") +
+    "Look for the morning low point: how close the battery gets to empty before sunrise." +
+    (sun
+      ? ` Sun / moon: median sunrise ${hm(sun.rise)} and sunset ${hm(sun.set)} over the last ${sun.days} days (first and last PV > 50 W): the battery charges under the sun and carries the house through the night.`
+      : "");
 
   return (
     <>
@@ -111,6 +117,7 @@ export function Battery({ mobile, fiveMin, daily, bms, model }: { mobile: boolea
         note={heatNote}
       >
         <div className="heatmap" role="table" aria-label="Hourly mean state of charge, last 14 days">
+          <DayNightStrip d={sun} mobile={mobile} />
           <span />
           {Array.from({ length: 24 }, (_, h) => (
             <span key={h} className="muted" style={{ fontSize: 10 }}>
@@ -148,6 +155,7 @@ export function Battery({ mobile, fiveMin, daily, bms, model }: { mobile: boolea
         }
       >
         <div className="heatmap" role="table" aria-label="Hourly warmest battery temperature, last 14 days">
+          <DayNightStrip d={sun} mobile={mobile} />
           <span />
           {Array.from({ length: 24 }, (_, h) => (
             <span key={h} className="muted" style={{ fontSize: 10 }}>
@@ -242,6 +250,52 @@ function TempRowView({ row, mobile }: { row: TempRow; mobile: boolean }) {
         if (c.kind === "future") return <div key={h} className="heat-cell" title={`${day} ${hh} · later today`} style={{ background: "var(--color-surface)" }} />;
         return <div key={h} className="heat-cell hatch" title={row.loaded ? `${day} ${hh} · no sample` : `${day} · not logged`} />;
       })}
+    </>
+  );
+}
+
+const SUN_BG = `color-mix(in srgb, ${COLORS.pv} 20%, var(--color-bg))`;
+const MOON = "#5b6ea8";
+const MOON_BG = `color-mix(in srgb, ${MOON} 16%, var(--color-bg))`;
+
+/** Sun / moon band over the hour columns: when the battery charges and when it carries the night. */
+function DayNightStrip({ d, mobile }: { d: Daylight | null; mobile: boolean }) {
+  if (!d) return null;
+  const h = mobile ? 20 : 24;
+  const band = (from: number, to: number, kind: "sun" | "moon") => {
+    if (to <= from) return null;
+    const sunUp = kind === "sun";
+    const wide = !mobile && to - from >= 4;
+    const text = sunUp ? `${hm(d.rise)}–${hm(d.set)} · charging` : "discharging";
+    return (
+      <div
+        key={`${kind}${from}`}
+        title={sunUp ? `Sun up ${hm(d.rise)}–${hm(d.set)} (median of ${d.days} days): PV charges the battery` : "Night: the battery discharges to run the house"}
+        style={{
+          gridColumn: `${from + 2} / ${to + 2}`,
+          height: h,
+          background: sunUp ? SUN_BG : MOON_BG,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+          fontSize: 11,
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+        }}
+      >
+        <span style={{ display: "flex", color: sunUp ? COLORS.pv : MOON }}>{sunUp ? <Sun size={14} /> : <Moon size={13} />}</span>
+        {wide && <span>{text}</span>}
+      </div>
+    );
+  };
+  return (
+    <>
+      <span />
+      {band(0, d.fromHour, "moon")}
+      {band(d.fromHour, d.toHour, "sun")}
+      {band(d.toHour, 24, "moon")}
     </>
   );
 }
