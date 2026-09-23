@@ -7,6 +7,7 @@ import { GridRow, Legend, Section } from "@/components/ui2";
 import { coverRange, type LineSeries } from "@/lib/charts";
 import { readingsFor } from "@/lib/energy";
 import { dm, dmy, hm, minuteOfDay } from "@/lib/format";
+import { daylight } from "@/lib/battery";
 import { bmsDay, bmsSince, completenessFor, healthDay, stateLog } from "@/lib/health";
 import { useWidth } from "@/lib/layout";
 import type { Model } from "@/lib/model";
@@ -52,6 +53,7 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
   const dayRows = useMemo(() => fiveMin.filter((r) => r.time.startsWith(today)), [fiveMin, today]);
   const log = useMemo(() => stateLog(dayRows), [dayRows]);
   const b = useMemo(() => bmsDay(bms, today), [bms, today]);
+  const sun = useMemo(() => daylight(fiveMin, today, 14), [fiveMin, today]);
   const bmsFrom = useMemo(() => bmsSince(bms), [bms]);
   const last = P.at(-1);
   // The latest day is still in progress until its 23:55 reading arrives.
@@ -188,16 +190,16 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
         note={balance}
       >
         <div ref={mainRef}>
-          <DayLineChart label="MPPT1 and MPPT2 power" width={mainW} height={260} series={charts.power.series} ymin={0} ymax={charts.power.ymax} step={1000} fmt={kw} nowT={nowT} />
+          <DayLineChart daylight={sun} label="MPPT1 and MPPT2 power" width={mainW} height={260} series={charts.power.series} ymin={0} ymax={charts.power.ymax} step={1000} fmt={kw} nowT={nowT} />
         </div>
       </Section>
 
       <div ref={pairRef} className="pair" style={{ margin: `28px ${pad}px 0` }}>
         <Section en="MPPT voltage" th="แรงดันแต่ละสตริง · V" note="MPPT1 solid, MPPT2 dashed. Night readings (~22 V) are standby.">
-          <DayLineChart label="MPPT voltage" width={halfW} height={220} series={charts.volt.series} ymin={0} ymax={charts.volt.ymax} step={charts.volt.ymax / 4} fmt={volts} nowT={nowT} />
+          <DayLineChart daylight={sun} label="MPPT voltage" width={halfW} height={220} series={charts.volt.series} ymin={0} ymax={charts.volt.ymax} step={charts.volt.ymax / 4} fmt={volts} nowT={nowT} />
         </Section>
         <Section en="Inverter temperature" th="อุณหภูมิภายในอินเวอร์เตอร์ · °C" note="Internal ambient sensor. Watch for sustained readings above 60 °C at midday.">
-          <DayLineChart label="Inverter temperature" width={halfW} height={220} series={charts.temp.series} ymin={charts.temp.ymin} ymax={charts.temp.ymax} step={5} fmt={deg} nowT={nowT} />
+          <DayLineChart daylight={sun} label="Inverter temperature" width={halfW} height={220} series={charts.temp.series} ymin={charts.temp.ymin} ymax={charts.temp.ymax} step={5} fmt={deg} nowT={nowT} />
         </Section>
       </div>
 
@@ -219,7 +221,7 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
             }
           >
             {batCharts ? (
-              <DayLineChart label="Battery temperature" width={halfW} height={220} series={batCharts.temp.series} ymin={batCharts.temp.ymin} ymax={batCharts.temp.ymax} step={5} fmt={deg} nowT={bmsNowT} />
+              <DayLineChart daylight={sun} label="Battery temperature" width={halfW} height={220} series={batCharts.temp.series} ymin={batCharts.temp.ymin} ymax={batCharts.temp.ymax} step={5} fmt={deg} nowT={bmsNowT} />
             ) : (
               <NoBms height={220} since={bmsFrom} date={today} />
             )}
@@ -240,7 +242,7 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
             }
           >
             {batCharts ? (
-              <DayLineChart label="Battery cell voltage" width={halfW} height={220} series={batCharts.cell.series} ymin={batCharts.cell.ymin} ymax={batCharts.cell.ymax} step={0.05} fmt={cellV} nowT={bmsNowT} />
+              <DayLineChart daylight={sun} label="Battery cell voltage" width={halfW} height={220} series={batCharts.cell.series} ymin={batCharts.cell.ymin} ymax={batCharts.cell.ymax} step={0.05} fmt={cellV} nowT={bmsNowT} />
             ) : (
               <NoBms height={220} since={bmsFrom} date={today} />
             )}

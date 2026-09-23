@@ -4,8 +4,8 @@ import { KpiGrid, type Kpi } from "@/components/Kpis";
 import { withInfo } from "@/lib/kpis";
 import { PageTitle } from "@/components/ui";
 import { GridRow, Legend, Section } from "@/components/ui2";
-import { daylight, equivalentCycles, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap, type Daylight, type TempRow } from "@/lib/battery";
-import { Moon, Sun } from "@/components/Icons";
+import { daylight, equivalentCycles, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap, type TempRow } from "@/lib/battery";
+import { DayNightStrip } from "@/components/DayNight";
 import { bmsSince } from "@/lib/health";
 import type { BarGroup } from "@/lib/charts";
 import { readingsFor, sumDaily } from "@/lib/energy";
@@ -254,48 +254,3 @@ function TempRowView({ row, mobile }: { row: TempRow; mobile: boolean }) {
   );
 }
 
-const SUN_BG = `color-mix(in srgb, ${COLORS.pv} 20%, var(--color-bg))`;
-const MOON = "#5b6ea8";
-const MOON_BG = `color-mix(in srgb, ${MOON} 16%, var(--color-bg))`;
-
-/** Sun / moon band over the hour columns: when the battery charges and when it carries the night. */
-function DayNightStrip({ d, mobile }: { d: Daylight | null; mobile: boolean }) {
-  if (!d) return null;
-  const h = mobile ? 20 : 24;
-  const band = (from: number, to: number, kind: "sun" | "moon") => {
-    if (to <= from) return null;
-    const sunUp = kind === "sun";
-    const wide = !mobile && to - from >= 4;
-    const text = sunUp ? `${hm(d.rise)}–${hm(d.set)} · charging` : "discharging";
-    return (
-      <div
-        key={`${kind}${from}`}
-        title={sunUp ? `Sun up ${hm(d.rise)}–${hm(d.set)} (median of ${d.days} days): PV charges the battery` : "Night: the battery discharges to run the house"}
-        style={{
-          gridColumn: `${from + 2} / ${to + 2}`,
-          height: h,
-          background: sunUp ? SUN_BG : MOON_BG,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-          fontSize: 11,
-          fontWeight: 600,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-        }}
-      >
-        <span style={{ display: "flex", color: sunUp ? COLORS.pv : MOON }}>{sunUp ? <Sun size={14} /> : <Moon size={13} />}</span>
-        {wide && <span>{text}</span>}
-      </div>
-    );
-  };
-  return (
-    <>
-      <span />
-      {band(0, d.fromHour, "moon")}
-      {band(d.fromHour, d.toHour, "sun")}
-      {band(d.toHour, 24, "moon")}
-    </>
-  );
-}
