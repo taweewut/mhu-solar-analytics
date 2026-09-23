@@ -44,7 +44,10 @@ function HomeSwitch({ size, route }: { size: number; route: Route }) {
   );
 }
 
-const LiveDot = () => <span style={{ width: 6, height: 6, background: "#3fa66a", flex: "none" }} />;
+/** Green: data is flowing. Amber: the scheduled fetch is paused (daily API budget). */
+const LiveDot = ({ paused }: { paused?: boolean }) => (
+  <span style={{ width: 6, height: 6, background: paused ? "#e0a100" : "#3fa66a", flex: "none" }} />
+);
 
 function ThemeButton() {
   const { theme, toggle } = useTheme();
@@ -65,7 +68,7 @@ function SettingsButton() {
 }
 
 /** Desktop nav (1c/1d/1e). */
-export function TopNav({ route, status, caps }: { route: Route; status: string; caps: Caps }) {
+export function TopNav({ route, status, caps, paused }: { route: Route; status: string; caps: Caps; paused?: string }) {
   const { home } = useHome();
   return (
     <nav className="nav" style={{ padding: "16px 48px", gap: 28 }}>
@@ -80,8 +83,8 @@ export function TopNav({ route, status, caps }: { route: Route; status: string; 
           {n.label}
         </a>
       ))}
-      <span className="tag tag-neutral" style={{ gap: 6, whiteSpace: "nowrap" }}>
-        <LiveDot />
+      <span className="tag tag-neutral" style={{ gap: 6, whiteSpace: "nowrap" }} title={paused}>
+        <LiveDot paused={!!paused} />
         {status}
       </span>
       <span className="nav-tools" style={{ marginLeft: -12 }}>
@@ -93,7 +96,7 @@ export function TopNav({ route, status, caps }: { route: Route; status: string; 
 }
 
 /** Mobile header (1a/1b). */
-export function MobileHeader({ time, route }: { time: string; route: Route }) {
+export function MobileHeader({ time, route, paused }: { time: string; route: Route; paused?: string }) {
   const { home } = useHome();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px 14px", borderBottom: "2px solid var(--color-divider)" }}>
@@ -105,8 +108,8 @@ export function MobileHeader({ time, route }: { time: string; route: Route }) {
           {home.subtitleShort}
         </span>
       </div>
-      <span className="tag tag-neutral" style={{ gap: 6 }}>
-        <LiveDot />
+      <span className="tag tag-neutral" style={{ gap: 6 }} title={paused}>
+        <LiveDot paused={!!paused} />
         {time}
       </span>
       <SettingsButton />

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { MobileHeader, TabBar, TopNav } from "@/components/Shell";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { dataSource } from "@/lib/api";
-import { dm, MONTH_ABBR } from "@/lib/format";
+import { MONTH_ABBR, dm, dmy } from "@/lib/format";
 import { capsFor, HomeProvider, routeAvailable } from "@/lib/home";
 import { useHomes } from "@/lib/hooks";
 import { DESKTOP_QUERY, useMedia } from "@/lib/layout";
@@ -44,7 +44,7 @@ export function App() {
 
 function HomeApp({ home, route, params }: { home: Home; route: Route; params: URLSearchParams }) {
   const desktop = useMedia(DESKTOP_QUERY);
-  const { model, fiveMin, daily, bills, bms, error } = useModel(home);
+  const { model, fiveMin, daily, bills, bms, fetchStatus, error } = useModel(home);
   const mobile = !desktop;
   const caps = model ? capsFor(home, model.dates) : null;
   const available = !caps || routeAvailable(route, caps);
@@ -60,6 +60,13 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
       ? `${home.utility} Log · last bill ${MONTH_ABBR[lastBill.month - 1]} ${lastBill.year}`
       : (model?.updated ?? "Loading…");
 
+  // The scheduled SolisCloud fetch paused by the daily API budget: say so, so a NOW line that
+  // stops moving explains itself.
+  const paused = fetchStatus?.paused && route !== "savings" ? fetchStatus.paused : null;
+  const pausedTitle = paused
+    ? `SolisCloud ${paused.reason}: new 5-minute readings resume at ${paused.until.slice(11)} (${dmy(paused.until)}). Last check ${fetchStatus!.checked.slice(11, 16)}; the battery sample keeps logging.`
+    : undefined;
+
   let body: React.ReactNode;
   if (error) body = loadError(error);
   else if (!model || !caps || !available) body = <div className="state muted">Loading data…</div>;
@@ -74,9 +81,9 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
   return (
     <div className={`app ${desktop ? "app-desktop" : "app-mobile"}`}>
       {desktop ? (
-        <TopNav route={route} status={status} caps={navCaps} />
+        <TopNav route={route} status={paused ? `${status.replace(" · UTC+7", "")} · paused to ${paused.until.slice(11)}` : status} caps={navCaps} paused={pausedTitle} />
       ) : (
-        <MobileHeader route={route} time={model ? model.lastTime || dm(model.asOf) : "—"} />
+        <MobileHeader route={route} time={model ? model.lastTime || dm(model.asOf) : "—"} paused={pausedTitle} />
       )}
       <main style={mobile ? { paddingBottom: 24 } : undefined}>{body}</main>
       {mobile && <TabBar route={route} caps={navCaps} />}

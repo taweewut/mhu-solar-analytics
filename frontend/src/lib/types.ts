@@ -99,6 +99,14 @@ export interface Bill {
   amount_thb: number;
 }
 
+/** The last scheduled SolisCloud fetch (data/<home>/fetch_status.json). */
+export interface FetchStatus {
+  checked: string; // "2026-09-23 22:32:57", local
+  latest: string | null; // newest 5-min reading
+  /** Set when the daily API budget paused the 5-min fetch. */
+  paused: { reason: string; detail: string; until: string } | null;
+}
+
 /** A battery BMS sample (SolisCloud inverterDetail snapshot, logged every 15 min). */
 export interface BmsRow {
   time: string; // the inverter's reading time, local UTC+7

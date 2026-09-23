@@ -39,7 +39,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import formatdate
 from pathlib import Path
 from typing import Any
@@ -63,6 +63,13 @@ class QuotaExceeded(SolisApiError):
 
 def utc_day() -> str:
     return datetime.now(UTC).date().isoformat()
+
+
+def resumes_at() -> str:
+    """When a used-up daily budget resets: the next 00:00 UTC, in local time."""
+    now = datetime.now(UTC)
+    midnight = datetime(now.year, now.month, now.day, tzinfo=UTC) + timedelta(days=1)
+    return midnight.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
 @dataclass

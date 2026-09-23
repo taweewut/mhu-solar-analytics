@@ -51,9 +51,17 @@ from momsolar.schema import (
     FIVE_MIN_COLUMNS,
     FIVE_MIN_FILE,
     HOMES_FILE,
+    STATUS_FILE,
 )
 from momsolar.sheets import fmt_num, merge, read_csv, write_csv
-from momsolar.solis_api import ROOT, QuotaExceeded, SolisApiError, SolisClient, records_of
+from momsolar.solis_api import (
+    ROOT,
+    QuotaExceeded,
+    SolisApiError,
+    SolisClient,
+    records_of,
+    resumes_at,
+)
 
 DEFAULT_HOME = "momhome"
 STATES = {1: "Normal", 2: "Offline", 3: "Alarm"}
@@ -269,6 +277,7 @@ def run(
         rowsd = merge(read_csv(home_dir / DAILY_FILE), newd, key=lambda r: r["Time"])
         write_csv(home_dir / DAILY_FILE, DAILY_COLUMNS, rowsd)
         counts[f"{home}/{DAILY_FILE}"] = len(rowsd)
+    paused = stopped  # the 5-min / daily fetch hit the budget (shown in the dashboard)
     if bms:  # its own endpoint and budget: sample even if the 5-min fetch stopped
         try:
             row = bms_row(client.inverter_detail(sn) or {})
@@ -280,12 +289,28 @@ def run(
             counts[f"{home}/{BMS_FILE}"] = len(rows_b)
             lo, hi = row["Battery Temp Min(C)"], row["Battery Temp Max(C)"]
             log(f"bms    {row['Time']}: battery {lo}–{hi} °C")
+    write_status(home_dir, paused)
     if stopped:
         log(f"stopped: {stopped}")
         left = [d for d in days if d not in fetched]
         if left:
             log(f"not fetched: {left[0]} … {left[-1]} ({len(left)} days); re-run later")
     return counts
+
+
+def write_status(home_dir: Path, paused: QuotaExceeded | None) -> None:
+    """Record this run for the dashboard header: when it ran, the newest 5-min reading, and
+    whether the daily budget paused the 5-min fetch (and until when)."""
+    latest = max((r["Time"] for r in read_csv(home_dir / FIVE_MIN_FILE)), default=None)
+    status = {
+        "checked": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "latest": latest,
+        "paused": {"reason": "daily API limit", "detail": str(paused), "until": resumes_at()}
+        if paused
+        else None,
+    }
+    home_dir.mkdir(parents=True, exist_ok=True)
+    (home_dir / STATUS_FILE).write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
 
 
 def day_range(since: str, until: date) -> list[str]:

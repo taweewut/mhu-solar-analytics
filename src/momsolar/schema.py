@@ -7,6 +7,7 @@
       <home>/daily.csv    one row per day           (Solis monthly report / Huawei reports)
       <home>/bills.csv    one row per utility bill  (PEA Log / MEA Log)
       <home>/bms.csv      battery BMS samples       (optional — SolisCloud API snapshots)
+      <home>/fetch_status.json  last API fetch      (optional — shown in the dashboard header)
 
 These headers are the contract between the pipeline scripts (writers), the API (reader) and
 the frontend's ``lib/csv.ts`` (reader). Header names follow the SolisCloud / PEA Log labels,
@@ -24,6 +25,8 @@ FIVE_MIN_FILE = "5min.csv"
 DAILY_FILE = "daily.csv"
 BILLS_FILE = "bills.csv"
 BMS_FILE = "bms.csv"
+# Last SolisCloud fetch: when, the newest reading, and whether the daily budget paused it.
+STATUS_FILE = "fetch_status.json"
 
 # Plant 5-min fields + the inverter fields the dashboard needs (MPPT split, SOH,
 # temperature) + the inverter's own day counters, which are more accurate than

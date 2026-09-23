@@ -215,3 +215,22 @@ def test_bms_is_sampled_even_when_the_5min_budget_is_used_up(tmp_path):
     )
     assert counts == {"h/bms.csv": 1} and times(d / "bms.csv") == ["2026-09-23 21:33:49"]
     assert any("stopped: inverterDay budget used" in line for line in log)
+
+
+def test_each_run_records_its_status_for_the_dashboard(tmp_path, monkeypatch):
+    monkeypatch.setattr(f, "resumes_at", lambda: "2026-09-24 07:00")
+    d = home(tmp_path)
+    f.run(FakeClient(), tmp_path, ["2026-09-22"], home="h", log=lambda *_: None, today="2026-09-23")
+    ok = json.loads((d / "fetch_status.json").read_text())
+    assert ok["latest"] == "2026-09-22 12:00:00" and ok["paused"] is None
+    f.run(
+        FakeClient(quota_after=0),
+        tmp_path,
+        ["2026-09-23"],
+        home="h",
+        log=lambda *_: None,
+        today="2026-09-23",
+    )
+    paused = json.loads((d / "fetch_status.json").read_text())
+    assert paused["paused"]["until"] == "2026-09-24 07:00"
+    assert paused["latest"] == "2026-09-22 12:00:00"  # the data it still has
