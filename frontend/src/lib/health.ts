@@ -176,6 +176,9 @@ export interface HealthHistoryRow {
   pct: number;
   /** Warmest BMS reading that day (null before battery logging started). */
   batMax: number | null;
+  /** Battery state of health at the day's last reading (null without a battery / reading). */
+  soh: number | null;
+  alarmCodes: string[];
 }
 
 /**
@@ -212,7 +215,100 @@ export function healthHistory(rows: FiveMinRow[], bms: BmsRow[], dates: string[]
         tempMax: h.tempMax,
         pct: c.pct ?? 0,
         batMax: batMax.get(date) ?? null,
+        soh: [...day].reverse().find((r) => r.soh_pct != null)?.soh_pct ?? null,
+        alarmCodes: h.alarmCodes,
       };
     })
     .filter((r): r is HealthHistoryRow => r != null);
+}
+
+export type HealthWindow = "1m" | "3m" | "6m" | "all";
+
+export const HEALTH_WINDOWS: [HealthWindow, string, string][] = [
+  ["1m", "1M", "1 เดือน"],
+  ["3m", "3M", "3 เดือน"],
+  ["6m", "6M", "6 เดือน"],
+  ["all", "Since start", "ทั้งหมด"],
+];
+
+const shiftMonths = (iso: string, m: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() - m);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
+/** First day of a window ending at `latest` (inclusive), never before `first` (switch-on). */
+export function windowStart(w: HealthWindow, latest: string, first: string): string {
+  if (w === "all") return first;
+  const from = shiftMonths(latest, w === "1m" ? 1 : w === "3m" ? 3 : 6);
+  return from < first ? first : from;
+}
+
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000) + 1;
+
+export interface HealthSummary {
+  from: string;
+  to: string;
+  /** Calendar days in the window, and how many have 5-minute data. */
+  days: number;
+  loaded: number;
+  normal: number;
+  alarms: number;
+  alarmCodes: string[];
+  /** Mean completeness over the calendar days (a day without data counts 0 %). */
+  dataPct: number;
+  lowDataDays: number;
+  balanceAvg: number | null;
+  balanceMin: number | null;
+  balanceMax: number | null;
+  balanceOut: number;
+  hottest: { date: string; c: number } | null;
+  hotDays: number;
+  tempAvg: number | null;
+  peak: { date: string; w: number } | null;
+  clipDays: number;
+  batMax: { date: string; c: number } | null;
+  sohStart: { date: string; v: number } | null;
+  sohEnd: { date: string; v: number } | null;
+}
+
+/**
+ * Roll the daily health lines (healthHistory, newest first) up over a window: normal days,
+ * data completeness, string balance, inverter heat, peak PV, battery. Thresholds as in the
+ * history table: balance 95–105 %, inverter 60 °C, data 95 %, clipping at 95 % of rated.
+ */
+export function healthSummary(history: HealthHistoryRow[], from: string, to: string, ratedW: number | null): HealthSummary {
+  const rows = history.filter((r) => r.date >= from && r.date <= to);
+  const days = daysBetween(from, to);
+  const bal = rows.map((r) => r.balance).filter((v): v is number => v != null);
+  const byMax = <T>(xs: T[], f: (x: T) => number) => xs.reduce<T | null>((a, x) => (a == null || f(x) > f(a) ? x : a), null);
+  const hot = byMax(rows, (r) => r.tempMax);
+  const pk = byMax(rows, (r) => r.peakW);
+  const bat = byMax(rows.filter((r) => r.batMax != null), (r) => r.batMax!);
+  const soh = rows.filter((r) => r.soh != null);
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, v) => a + v, 0) / xs.length : null);
+  return {
+    from,
+    to,
+    days,
+    loaded: rows.length,
+    normal: rows.filter((r) => r.ok).length,
+    alarms: rows.reduce((a, r) => a + r.alarms, 0),
+    alarmCodes: [...new Set(rows.flatMap((r) => r.alarmCodes))],
+    dataPct: Math.round(rows.reduce((a, r) => a + r.pct, 0) / Math.max(days, 1)),
+    lowDataDays: rows.filter((r) => r.pct < 95).length,
+    balanceAvg: bal.length ? Math.round(mean(bal)!) : null,
+    balanceMin: bal.length ? Math.min(...bal) : null,
+    balanceMax: bal.length ? Math.max(...bal) : null,
+    balanceOut: bal.filter((v) => v < 95 || v > 105).length,
+    hottest: hot ? { date: hot.date, c: hot.tempMax } : null,
+    hotDays: rows.filter((r) => r.tempMax >= 60).length,
+    tempAvg: rows.length ? Math.round(mean(rows.map((r) => r.tempMax))! * 10) / 10 : null,
+    peak: pk ? { date: pk.date, w: pk.peakW } : null,
+    clipDays: ratedW ? rows.filter((r) => r.peakW >= 0.95 * ratedW).length : 0,
+    batMax: bat ? { date: bat.date, c: bat.batMax! } : null,
+    sohStart: soh.length ? { date: soh[soh.length - 1].date, v: soh[soh.length - 1].soh! } : null,
+    sohEnd: soh.length ? { date: soh[0].date, v: soh[0].soh! } : null,
+  };
 }

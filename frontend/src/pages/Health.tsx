@@ -1,16 +1,17 @@
 import { useMemo, useState } from "react";
+import { DailyTrend } from "@/components/DailyTrend";
 import { DateNav } from "@/components/DateNav";
 import { DayLineChart } from "@/components/DayLineChart";
 import { Check, ChevronDown, TriangleAlert } from "@/components/Icons";
 import { KpiGrid, type Kpi } from "@/components/Kpis";
 import { PageTitle } from "@/components/ui";
-import { Legend, LegendRow, Section, StateRow, WarnTag } from "@/components/ui2";
+import { Legend, LegendRow, Section, Seg, StateRow, WarnTag } from "@/components/ui2";
 import { daylight } from "@/lib/battery";
 import { coverRange, type LineSeries } from "@/lib/charts";
 import { readingsFor } from "@/lib/energy";
 import { dm, dmy, hm, minuteOfDay, weekday } from "@/lib/format";
 import { navigate } from "@/lib/router";
-import { bmsDay, bmsSince, completenessFor, completenessShade, healthDay, healthHistory, SPARSE_MIN, stateLog, stringRatio, type HealthHistoryRow } from "@/lib/health";
+import { bmsDay, bmsSince, completenessFor, completenessShade, healthDay, healthHistory, healthSummary, HEALTH_WINDOWS, SPARSE_MIN, stateLog, stringRatio, windowStart, type HealthHistoryRow, type HealthWindow } from "@/lib/health";
 import { useHome } from "@/lib/home";
 import { withInfo } from "@/lib/kpis";
 import { useWidth } from "@/lib/layout";
@@ -60,6 +61,11 @@ export function Health({ mobile, fiveMin, bms, model, date: requested }: { mobil
     return lp != null && minuteOfDay(lp.time) < 1435;
   })();
   const history = useMemo(() => healthHistory(fiveMin, bms, model.dates, latest, liveLatest), [fiveMin, bms, model.dates, latest, liveLatest]);
+  // Summary window (1M / 3M / 6M / since start), shared with the history table.
+  const [win, setWin] = useState<HealthWindow>("1m");
+  const from = windowStart(win, latest, model.dates[0] ?? latest);
+  const summary = useMemo(() => healthSummary(history, from, latest, inv.ratedW), [history, from, latest, inv.ratedW]);
+  const windowRows = useMemo(() => history.filter((r) => r.date >= from), [history, from]);
   const nowT = live ? last!.t : null;
   // A BMS sample can be newer than the last 5-min reading.
   const bmsNowT = nowT != null && b ? Math.max(nowT, ...b.tempMax.map(([t]) => t)) : nowT;
@@ -321,7 +327,8 @@ export function Health({ mobile, fiveMin, bms, model, date: requested }: { mobil
         )}
       </div>
 
-      <HealthHistory rows={history} selected={today} onPick={go} mobile={mobile} ratedW={inv.ratedW} pad={pad} battery={!!home.battery} />
+      <HealthSummarySection s={summary} rows={windowRows} win={win} setWin={setWin} mobile={mobile} pad={pad} battery={!!home.battery} />
+      <HealthHistory rows={windowRows} selected={today} onPick={go} mobile={mobile} ratedW={inv.ratedW} pad={pad} battery={!!home.battery} />
 
       <div ref={moreRef} style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0`, borderTop: "2px solid var(--color-divider)" }}>
         <span className="muted-72" style={{ display: "block", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", padding: "12px 0 4px" }}>
@@ -415,7 +422,7 @@ function HealthHistory({ rows, selected, onPick, mobile, ratedW, pad, battery }:
     <Section
       style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0` }}
       en="Health history"
-      th={`ประวัติสุขภาพระบบ · ${rows.length} days with 5-minute data · ${issues ? `${issues} with a state change or alarm` : "all normal"}`}
+      th={`ประวัติสุขภาพระบบ · day by day · ${rows.length} days in the period · ${issues ? `${issues} with a state change or alarm` : "all normal"}`}
       note="Tap a day to open it above. Tags mark values outside the usual range: string balance outside 95–105 %, inverter at 60 °C or more, data under 95 %."
     >
       {mobile ? (
@@ -476,6 +483,124 @@ function HealthHistory({ rows, selected, onPick, mobile, ratedW, pad, battery }:
           {all ? `Show the last ${HIST_ROWS} days` : `Show all ${rows.length} days`}
         </button>
       )}
+    </Section>
+  );
+}
+
+/**
+ * Health over a period (1M / 3M / 6M / since start): the daily lines rolled up into six cards
+ * and two per-day trends (inverter max with the 60 °C line, string balance with its ±5 % band).
+ */
+function HealthSummarySection({
+  s,
+  rows,
+  win,
+  setWin,
+  mobile,
+  pad,
+  battery,
+}: {
+  s: ReturnType<typeof healthSummary>;
+  rows: HealthHistoryRow[];
+  win: HealthWindow;
+  setWin: (w: HealthWindow) => void;
+  mobile: boolean;
+  pad: number;
+  battery: boolean;
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const half = mobile ? width : (width - 32) / 2;
+  const at = (d: { date: string } | null) => (d ? ` on ${dm(d.date)}` : "");
+  const missing = s.days - s.loaded;
+  const cards: Kpi[] = [
+    {
+      label: "Normal days",
+      th: "วันที่ทำงานปกติ",
+      value: `${s.normal}`,
+      unit: `of ${s.loaded}`,
+      sub: s.loaded - s.normal ? `${s.loaded - s.normal} with a state change or alarm${s.alarmCodes.length ? ` (${s.alarmCodes.join(", ")})` : ""}` : "no alarms or state changes",
+      info: ["Days whose 5-minute readings were all in the Normal working state with no alarm code.", "Days without data are counted under Data, not here."],
+    },
+    {
+      label: "Data",
+      th: "ความครบถ้วนของข้อมูล",
+      value: String(s.dataPct),
+      unit: "%",
+      sub: `${s.lowDataDays} day${s.lowDataDays === 1 ? "" : "s"} under 95 %${missing ? ` · ${missing} without data` : ""}`,
+      info: ["Readings received ÷ expected over every calendar day of the period (a day without data counts 0 %)."],
+    },
+    {
+      label: "String balance",
+      th: "สมดุลสตริง",
+      value: s.balanceAvg != null ? String(s.balanceAvg) : "—",
+      unit: s.balanceAvg != null ? "%" : undefined,
+      sub: s.balanceMin != null ? `range ${s.balanceMin}–${s.balanceMax} % · ${s.balanceOut} day${s.balanceOut === 1 ? "" : "s"} outside ±5 %` : "no PV data",
+      info: ["Average daily MPPT2 ÷ MPPT1 energy. Two equal strings sit near 100 %; a drift that lasts points to shade, dirt or a loose connector on one string."],
+    },
+    {
+      label: "Inverter max",
+      th: "อุณหภูมิอินเวอร์เตอร์สูงสุด",
+      value: s.hottest ? s.hottest.c.toFixed(1) : "—",
+      unit: "°C",
+      sub: `${at(s.hottest).trim()}${s.hottest ? " · " : ""}${s.hotDays} day${s.hotDays === 1 ? "" : "s"} ≥ 60 °C · avg ${s.tempAvg ?? "—"} °C`,
+      info: ["The hottest internal temperature in the period, how many days reached 60 °C, and the average of the daily maximums.", "Sustained heat reduces efficiency and lifespan; check ventilation if hot days are frequent."],
+    },
+    {
+      label: "Peak PV",
+      th: "กำลังสูงสุด",
+      value: s.peak ? (s.peak.w / 1000).toFixed(2) : "—",
+      unit: "kW",
+      sub: `${at(s.peak).trim()}${s.clipDays ? ` · ${s.clipDays} day${s.clipDays === 1 ? "" : "s"} near clipping` : ""}`,
+      info: ["The highest 5-minute PV power in the period, and days within 5 % of the inverter's rating (where it caps output)."],
+    },
+    battery
+      ? {
+          label: "Battery",
+          th: "แบตเตอรี่",
+          value: s.sohEnd ? String(Math.round(s.sohEnd.v)) : "—",
+          unit: "% SOH",
+          sub:
+            (s.sohStart && s.sohEnd && s.sohStart.date !== s.sohEnd.date ? `${Math.round(s.sohStart.v)} % on ${dm(s.sohStart.date)}` : "state of health") +
+            (s.batMax ? ` · warmest ${s.batMax.c} °C${at(s.batMax)}` : ""),
+          info: ["State of health reported by the BMS at the end of the period, against the start of it.", "Warmest = the highest battery temperature logged (logging started 23/09/2026)."],
+        }
+      : {
+          label: "Days with data",
+          th: "วันที่มีข้อมูล",
+          value: String(s.loaded),
+          unit: `of ${s.days}`,
+          sub: "5-minute data",
+        },
+  ];
+  const chrono = [...rows].reverse();
+  const temps = chrono.map((r) => ({ date: r.date, v: r.tempMax }));
+  const bal = chrono.map((r) => ({ date: r.date, v: r.balance }));
+  const tMax = Math.max(60, ...temps.map((p) => p.v));
+  const tMin = Math.min(40, ...temps.map((p) => p.v));
+  const ty = [Math.floor(tMin / 5) * 5, Math.ceil(tMax / 5) * 5];
+
+  return (
+    <Section
+      style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0` }}
+      en="Health summary"
+      th={`สรุปสุขภาพระบบ · ${dmy(s.from)} – ${dmy(s.to)} · ${s.days} days`}
+      extra={<Seg name="health-win" value={win} options={HEALTH_WINDOWS} onChange={setWin} mobile={mobile} />}
+    >
+      <KpiGrid plain mobile={mobile} items={mobile ? cards : cards} style={mobile ? { margin: "0 -20px" } : undefined} />
+      <div ref={ref} className="pair" style={{ marginTop: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>
+            Inverter max per day <span className="muted-72" style={{ fontWeight: 400 }}>· dotted = 60 °C</span>
+          </span>
+          <DailyTrend label="Inverter maximum temperature per day" points={temps} width={half} ymin={ty[0]} ymax={ty[1]} step={5} fmt={(v) => `${v}°`} color="var(--color-text)" refLine={60} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>
+            String balance per day <span className="muted-72" style={{ fontWeight: 400 }}>· band = ±5 %</span>
+          </span>
+          <DailyTrend label="String balance per day" points={bal} width={half} ymin={80} ymax={120} step={10} fmt={(v) => `${v}%`} color={COLORS.pv} band={[95, 105]} />
+        </div>
+      </div>
     </Section>
   );
 }

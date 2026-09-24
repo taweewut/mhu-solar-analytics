@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DAY_ROWS } from "@/lib/__fixtures__/project";
 import { hm } from "@/lib/format";
-import { bmsDay, bmsSince, completeness, completenessFor, completenessShade, expectedReadings, healthDay, healthHistory, stateLog, stringRatio } from "@/lib/health";
+import { bmsDay, bmsSince, completeness, completenessFor, completenessShade, expectedReadings, healthDay, healthHistory, healthSummary, stateLog, stringRatio, windowStart, type HealthHistoryRow } from "@/lib/health";
 import type { BmsRow } from "@/lib/types";
 
 describe("data completeness = readings ÷ expected", () => {
@@ -121,5 +121,34 @@ describe("health history (one line per day, newest first)", () => {
     expect(hist[0]).toMatchObject({ ok: true, alarms: 0, pct: 100, batMax: 32 });
     expect(hist[1]).toMatchObject({ pct: 51, batMax: null }); // a finished day counts against 288
     expect(hist[0].balance).toBeGreaterThan(90);
+  });
+});
+
+describe("health summary over 1M / 3M / 6M / since start", () => {
+  it("windows end at the latest day and never start before switch-on", () => {
+    expect(windowStart("1m", "2026-09-24", "2026-03-29")).toBe("2026-08-25");
+    expect(windowStart("6m", "2026-09-24", "2026-03-29")).toBe("2026-03-29");
+    expect(windowStart("all", "2026-09-24", "2026-03-29")).toBe("2026-03-29");
+  });
+
+  const day = (date: string, o: Partial<HealthHistoryRow> = {}): HealthHistoryRow => ({
+    date, ok: true, state: "Normal", alarms: 0, balance: 99, peakW: 6000, tempMax: 55, pct: 100, batMax: null, soh: 99, alarmCodes: [], ...o,
+  });
+  const hist = [
+    day("2026-09-24", { batMax: 32, soh: 98 }),
+    day("2026-09-23", { tempMax: 64.3, balance: 93, pct: 90 }),
+    day("2026-09-21", { ok: false, alarms: 2, alarmCodes: ["1015"], peakW: 9600 }),
+    day("2026-08-01", { tempMax: 70 }),
+  ];
+
+  it("rolls up the days in the window; a day without data counts as 0 % data", () => {
+    const s = healthSummary(hist, "2026-09-21", "2026-09-24", 10000);
+    expect([s.days, s.loaded, s.normal, s.alarms, s.alarmCodes]).toEqual([4, 3, 2, 2, ["1015"]]);
+    expect([s.dataPct, s.lowDataDays]).toEqual([73, 1]); // (100 + 90 + 100 + 0) / 4
+    expect([s.balanceMin, s.balanceMax, s.balanceOut]).toEqual([93, 99, 1]);
+    expect(s.hottest).toEqual({ date: "2026-09-23", c: 64.3 });
+    expect([s.hotDays, s.clipDays]).toEqual([1, 1]);
+    expect(s.batMax).toEqual({ date: "2026-09-24", c: 32 });
+    expect([s.sohStart?.v, s.sohEnd?.v]).toEqual([99, 98]);
   });
 });
