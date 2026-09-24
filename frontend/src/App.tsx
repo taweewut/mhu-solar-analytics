@@ -72,7 +72,17 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
   if (route === "tv") {
     if (error) return loadError(error);
     if (!model || !caps || !available) return <div className="state muted">Loading…</div>;
-    return <Tv fiveMin={fiveMin} model={model} weather={weather} feed={feed} seconds={Number(params.get("s")) || 20} />;
+    const theme = params.get("theme");
+    return (
+      <Tv
+        fiveMin={fiveMin}
+        model={model}
+        weather={weather}
+        feed={feed}
+        seconds={Number(params.get("s")) || 20}
+        theme={theme === "light" || theme === "dark" ? theme : "auto"}
+      />
+    );
   }
 
   let body: React.ReactNode;

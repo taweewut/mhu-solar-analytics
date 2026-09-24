@@ -21,7 +21,8 @@ import { daySummary, weatherDay } from "@/lib/weather";
 // TV browsers run an older Chromium, so this page uses only plain colours (no color-mix()),
 // grid layout (no flex gap) and sizes in vw so it fills any TV resolution.
 
-const TV_VARS = {
+// Two palettes in plain colours (TV browsers lack color-mix()): light by day, dark by night.
+const DARK = {
   "--color-bg": "#1b1a19",
   "--color-surface": "#272524",
   "--color-text": "#f1efee",
@@ -33,10 +34,33 @@ const TV_VARS = {
   "--night": "rgba(241,239,238,0.13)",
   "--hatch": "repeating-linear-gradient(45deg, transparent 0 4px, rgba(241,239,238,0.22) 4px 6px)",
   "--ramp-base": "#2d2b2b",
+  "--tv-dot-off": "rgba(241,239,238,0.25)",
+} as React.CSSProperties;
+const LIGHT = {
+  "--color-bg": "#f3f2f2",
+  "--color-surface": "#eae9e9",
+  "--color-text": "#201e1d",
+  "--color-divider": "rgba(32,30,29,0.4)",
+  "--color-accent": "#ec3013",
+  "--muted": "rgba(32,30,29,0.72)",
+  "--muted-72": "rgba(32,30,29,0.72)",
+  "--sun": "rgba(233,168,37,0.42)",
+  "--night": "rgba(32,30,29,0.09)",
+  "--hatch": "repeating-linear-gradient(45deg, transparent 0 4px, rgba(32,30,29,0.14) 4px 6px)",
+  "--ramp-base": "#f3f2f2",
+  "--tv-dot-off": "rgba(32,30,29,0.2)",
 } as React.CSSProperties;
 
-const MUTED = "rgba(241,239,238,0.72)";
-const RULE = "2px solid rgba(241,239,238,0.3)";
+export type TvTheme = "auto" | "light" | "dark";
+
+/** Light between sunrise and sunset (minutes of day), dark otherwise — or a forced theme. */
+export function tvIsLight(theme: TvTheme, minute: number, rise = 360, set = 1080): boolean {
+  if (theme !== "auto") return theme === "light";
+  return minute >= rise && minute < set;
+}
+
+const MUTED = "var(--muted)";
+const RULE = "2px solid var(--color-divider)";
 const SLIDES = ["now", "day", "flow", "savings"] as const;
 type Slide = (typeof SLIDES)[number];
 const TITLES: Record<Slide, [string, string]> = {
@@ -48,7 +72,7 @@ const TITLES: Record<Slide, [string, string]> = {
 
 const kw = (w: number) => (Math.abs(w) / 1000).toFixed(1);
 
-export function Tv({ fiveMin, model, weather, feed, seconds = 20 }: { fiveMin: FiveMinRow[]; model: Model; weather: WeatherRow[]; feed: FeedState | null; seconds?: number }) {
+export function Tv({ fiveMin, model, weather, feed, seconds = 20, theme = "auto" }: { fiveMin: FiveMinRow[]; model: Model; weather: WeatherRow[]; feed: FeedState | null; seconds?: number; theme?: TvTheme }) {
   const { home } = useHome();
   const { costFor } = useSettings();
   const [i, setI] = useState(0);
@@ -89,6 +113,8 @@ export function Tv({ fiveMin, model, weather, feed, seconds = 20 }: { fiveMin: F
   const { cost, placeholder } = costFor(home);
   const pay = payback(model.savings.cumTotal, model.savings.avgMonthly, cost, model.commissioned);
   const slide = SLIDES[i];
+  // Auto theme follows the sun (the same sunrise / sunset as the strip); the clock ticks it over.
+  const light = tvIsLight(theme, clock.getHours() * 60 + clock.getMinutes(), sun?.rise, sun?.set);
   const nameTh = home.subtitleShort.split(" · ")[0];
 
   const tiles: Tile[] =
@@ -117,14 +143,14 @@ export function Tv({ fiveMin, model, weather, feed, seconds = 20 }: { fiveMin: F
   return (
     <div
       style={{
-        ...TV_VARS,
+        ...(light ? LIGHT : DARK),
         position: "fixed",
         left: 0,
         top: 0,
         right: 0,
         bottom: 0,
-        background: "#1b1a19",
-        color: "#f1efee",
+        background: "var(--color-bg)",
+        color: "var(--color-text)",
         fontSize: "1.25vw",
         display: "grid",
         gridTemplateRows: "auto 1fr auto",
@@ -204,7 +230,7 @@ export function Tv({ fiveMin, model, weather, feed, seconds = 20 }: { fiveMin: F
       {/* Slide dots */}
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${SLIDES.length}, 2.4vw)`, columnGap: "0.8vw", justifyContent: "center", paddingTop: "1vw" }}>
         {SLIDES.map((s, n) => (
-          <span key={s} style={{ height: "0.5vw", background: n === i ? "#f1efee" : "rgba(241,239,238,0.25)" }} />
+          <span key={s} style={{ height: "0.5vw", background: n === i ? "var(--color-text)" : "var(--tv-dot-off)" }} />
         ))}
       </div>
     </div>
@@ -222,9 +248,9 @@ interface Tile {
 
 function Tiles({ tiles, cols }: { tiles: Tile[]; cols: number }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: "2px", background: "rgba(241,239,238,0.3)", borderTop: RULE, borderBottom: RULE, alignSelf: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: "2px", background: "var(--color-divider)", borderTop: RULE, borderBottom: RULE, alignSelf: "start" }}>
       {tiles.map((t) => (
-        <div key={t.en} style={{ background: "#1b1a19", padding: "1.6vw 1.4vw" }}>
+        <div key={t.en} style={{ background: "var(--color-bg)", padding: "1.6vw 1.4vw" }}>
           <div style={{ fontSize: "1.5em", fontWeight: 700 }}>
             {t.color && <span style={{ display: "inline-block", width: "0.7em", height: "0.7em", background: t.color, marginRight: "0.4em" }} />}
             {t.en}
