@@ -99,3 +99,25 @@ export function dailyWeather(rows: WeatherRow[], dates: string[]): Map<string, D
   });
   return out;
 }
+
+export interface RainSpell {
+  /** First wet hour and the hour after the last one (0–24). */
+  from: number;
+  to: number;
+  mm: number;
+}
+
+/** Runs of consecutive hours with ≥ `min` mm of rain (the TV's "rain 14:00–17:00" line). */
+export function rainSpells(hours: WeatherHour[], min = 0.5): RainSpell[] {
+  const out: RainSpell[] = [];
+  for (const x of hours) {
+    const mm = x.row?.rain_mm ?? 0;
+    if (mm < min) continue;
+    const prev = out[out.length - 1];
+    if (prev && prev.to === x.h) {
+      prev.to = x.h + 1;
+      prev.mm += mm;
+    } else out.push({ from: x.h, to: x.h + 1, mm });
+  }
+  return out.map((s) => ({ ...s, mm: Math.round(s.mm * 10) / 10 }));
+}

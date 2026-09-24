@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { condition, dailyWeather, daySummary, weatherDay } from "@/lib/weather";
+import { condition, dailyWeather, daySummary, rainSpells, weatherDay } from "@/lib/weather";
 import type { WeatherRow } from "@/lib/types";
 
 const w = (h: number, code: number, rain = 0): WeatherRow => ({ time: `2026-09-23 ${String(h).padStart(2, "0")}:00`, code, cloud_pct: null, rain_mm: rain, radiation_wm2: null });
@@ -33,5 +33,16 @@ describe("daily weather for the Day-by-day table", () => {
     expect(m.get("2026-09-23")?.sky).toBe("clear");
     expect(m.get("2026-09-22")).toMatchObject({ sky: "rain", rainMm: 9 });
     expect(m.has("2026-09-21")).toBe(false);
+  });
+});
+
+describe("rain spells for the TV weather line", () => {
+  it("joins consecutive wet hours and ignores traces", () => {
+    const day = weatherDay([w(9, 51, 0.2), w(14, 61, 1.5), w(15, 95, 20.1), w(16, 63, 9.7), w(21, 61, 0.6)], "2026-09-23");
+    expect(rainSpells(day)).toEqual([
+      { from: 14, to: 17, mm: 31.3 },
+      { from: 21, to: 22, mm: 0.6 },
+    ]);
+    expect(rainSpells(weatherDay([], "2026-09-23"))).toEqual([]);
   });
 });

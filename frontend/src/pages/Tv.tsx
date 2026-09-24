@@ -14,7 +14,7 @@ import { useSettings } from "@/lib/settings";
 import type { FeedState } from "@/lib/status";
 import { payback } from "@/lib/tariff";
 import type { FiveMinRow, WeatherRow } from "@/lib/types";
-import { daySummary, weatherDay } from "@/lib/weather";
+import { daySummary, rainSpells, weatherDay, type DaySummary, type RainSpell } from "@/lib/weather";
 
 // TV mode (#/<home>/tv): a full-screen, no-touch dashboard for a living-room TV (LG webOS).
 // Four slides rotate every 20 s (◀ ▶ on the remote step them); data refreshes on its own.
@@ -108,6 +108,7 @@ export function Tv({ fiveMin, model, weather, feed, seconds = 20, theme = "auto"
   const wx = useMemo(() => weatherDay(weather, date), [weather, date]);
   const wxDay = useMemo(() => daySummary(wx, sun?.rise, sun?.set), [wx, sun]);
   const wxNow = last ? wx[Math.floor(last.t / 60)] : null;
+  const spells = useMemo(() => rainSpells(wx), [wx]);
   const ss = totals && totals.load > 0 ? Math.round(selfSufficiency(totals) * 100) : null;
   const savings = useMemo(() => savingsKpis(model.savings, home.utility), [model.savings, home.utility]);
   const { cost, placeholder } = costFor(home);
@@ -179,7 +180,7 @@ export function Tv({ fiveMin, model, weather, feed, seconds = 20, theme = "auto"
       </div>
 
       {/* Body */}
-      <div ref={ref} style={{ minHeight: 0, paddingTop: "1.6vw", display: "grid", gridTemplateRows: slide === "now" ? "auto 1fr" : "1fr auto", rowGap: "1.4vw" }}>
+      <div ref={ref} style={{ minHeight: 0, paddingTop: "1.6vw", display: "grid", gridTemplateRows: slide === "now" ? "auto 1fr" : slide === "day" ? "1fr auto auto" : "1fr auto", rowGap: "1.4vw" }}>
         {slide === "now" && (
           <>
             <div style={{ fontSize: "2.2em", fontWeight: 800 }}>
@@ -196,7 +197,7 @@ export function Tv({ fiveMin, model, weather, feed, seconds = 20, theme = "auto"
         {slide === "day" && (
           <>
             {P.length ? (
-              <DayPowerChart P={P} date={date} width={width} height={Math.round(window.innerHeight * 0.52)} live daylight={sun} weather={wx} />
+              <DayPowerChart P={P} date={date} width={width} height={Math.round(window.innerHeight * 0.46)} live daylight={sun} weather={wx} />
             ) : (
               <div style={{ fontSize: "2em", color: MUTED }}>No readings yet today.</div>
             )}
@@ -207,8 +208,8 @@ export function Tv({ fiveMin, model, weather, feed, seconds = 20, theme = "auto"
                 [COLORS.bat, `Battery ${last ? last.soc : "—"} %`],
                 [COLORS.grid, `Grid ${totals ? totals.gridImport.toFixed(1) : "—"} kWh`],
               ]}
-              extra={wxDay ? wxDay.en : undefined}
             />
+            <WeatherLine day={wxDay} now={wxNow?.cond?.th ?? null} spells={spells} />
           </>
         )}
         {slide === "flow" && (
@@ -267,30 +268,40 @@ function Tiles({ tiles, cols }: { tiles: Tile[]; cols: number }) {
   );
 }
 
-function Legend({ items, extra }: { items: [string, string][]; extra?: string }) {
+function Legend({ items }: { items: [string, string][] }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length + (extra ? 1 : 0)}, auto)`, justifyContent: "start", columnGap: "2.5vw", fontSize: "1.6em", fontWeight: 700 }}>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, auto)`, justifyContent: "start", columnGap: "2.5vw", fontSize: "1.6em", fontWeight: 700 }}>
       {items.map(([c, label]) => (
         <span key={label}>
           <span style={{ display: "inline-block", width: "0.7em", height: "0.7em", background: c, marginRight: "0.4em" }} />
           {label}
         </span>
       ))}
-      {extra && (
-        <span style={{ color: MUTED, fontWeight: 400 }}>
-          <SkyIconFor text={extra} /> {extra}
-        </span>
-      )}
     </div>
   );
 }
 
-/** A small weather icon for the day summary line. */
-function SkyIconFor({ text }: { text: string }) {
-  const sky = /storm/i.test(text) ? "storm" : /rain/i.test(text) ? "rain" : /sunny/i.test(text) ? "clear" : /cloudy/i.test(text) && /mostly/i.test(text) ? "cloudy" : "partly";
+const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
+
+/** Today's weather in Thai under the Day chart: summary + now, when it rained, and where the icons come from. */
+function WeatherLine({ day, now, spells }: { day: DaySummary | null; now: string | null; spells: RainSpell[] }) {
+  if (!day && !now) return null;
+  const rain = spells.slice(0, 3).map((s) => `${hh(s.from)}–${hh(s.to)} (${s.mm} มม.)`).join(", ");
   return (
-    <span style={{ display: "inline-block", verticalAlign: "middle" }}>
-      <SkyIcon sky={sky} size={22} />
-    </span>
+    <div style={{ borderTop: RULE, paddingTop: "0.8vw" }}>
+      <div style={{ fontSize: "1.6em", fontWeight: 700 }}>
+        {day && (
+          <span style={{ display: "inline-block", verticalAlign: "middle", marginRight: "0.4em" }}>
+            <SkyIcon sky={day.sky} size={30} />
+          </span>
+        )}
+        {day ? `อากาศวันนี้: ${day.th}` : ""}
+        {now ? <span style={{ fontWeight: 400, color: MUTED }}>{`${day ? " · " : ""}ตอนนี้: ${now}`}</span> : null}
+      </div>
+      <div style={{ fontSize: "1.1em", color: MUTED, marginTop: "0.3em" }}>
+        {rain ? `ฝนตกช่วง ${rain} · ` : ""}
+        ไอคอนบนกราฟ: แบบจำลองอากาศ Open-Meteo (ไม่ใช่เซนเซอร์ที่บ้าน) · สีจาง = พยากรณ์
+      </div>
+    </div>
   );
 }
