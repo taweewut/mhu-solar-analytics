@@ -40,7 +40,7 @@ def test_rows_from_maps_hours_and_skips_hours_without_a_code():
 
 
 def home(tmp_path, location=True):
-    h = {"id": "h"} | ({"location": {"lat": 13.7412, "lon": 101.3588}} if location else {})
+    h = {"id": "h"} | ({"location": {"lat": 13.7563, "lon": 100.5018}} if location else {})
     (tmp_path / "homes.json").write_text(json.dumps([h]))
 
 
@@ -52,7 +52,7 @@ def test_run_sends_a_rounded_location_and_merges_by_hour(tmp_path, monkeypatch):
         w.run(tmp_path, "h", since="2026-09-01", today=date(2026, 9, 24), log=lambda *_: None) == 2
     )
     (archive, a), (recent, r) = calls
-    assert archive == w.ARCHIVE and (a["latitude"], a["longitude"]) == (13.74, 101.36)
+    assert archive == w.ARCHIVE and (a["latitude"], a["longitude"]) == (13.76, 100.5)
     assert (a["start_date"], a["end_date"]) == ("2026-09-01", "2026-09-19")
     assert recent == w.FORECAST and r["forecast_days"] == 1
     with (tmp_path / "h" / "weather.csv").open() as fh:
