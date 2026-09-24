@@ -1,7 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { GroupedBarChart } from "@/components/GroupedBarChart";
 import { KpiGrid, type Kpi } from "@/components/Kpis";
-import { GridRow, Legend, Section } from "@/components/ui2";
+import { GridRow, Legend, LegendRow, Section } from "@/components/ui2";
 import type { BarGroup, RightAxis } from "@/lib/charts";
 import { MONTH_ABBR, thb } from "@/lib/format";
 import { useHome } from "@/lib/home";
@@ -26,6 +26,7 @@ export function TouAnalysis({ bills, daily, mobile, style }: { bills: Bill[]; da
   const s = useMemo(() => touAnalysis(bills, daily, t), [bills, daily, t]);
   const stop = useMemo(() => exportStop(daily), [daily]);
   const [ref, width] = useWidth<HTMLDivElement>();
+  const [open, setOpen] = useState<string | null>(null);
   if (!s || !s.first || t.touOn == null || t.touOff == null) return null;
 
   const mon = (r: { year: number; month: number }) => `${MONTH_ABBR[r.month - 1]} ${r.year}`;
@@ -105,6 +106,104 @@ export function TouAnalysis({ bills, daily, mobile, style }: { bills: Bill[]; da
     invalid.length ? `${invalid.map(mon).join(" and ")}: the logged on/off-peak units repeat the month before and don't add up to the billed units, so they're left out (hatched).` : "",
   ];
 
+  if (mobile) {
+    // Review 3g: two facts, then one row per bill — on-peak share bar against its break-even
+    // tick (0–50 %), saved on the right; tap a row for its numbers. Newest first.
+    const rows = [...s.rows].reverse();
+    const openKey = open ?? rows.find((r) => r.valid)?.key ?? null;
+    const scale = 50;
+    const fact = (label: string, value: string, sub: string, left?: boolean) => (
+      <div style={{ background: "var(--color-bg)", padding: left ? "10px 12px 10px 0" : "10px 0 10px 12px", display: "flex", flexDirection: "column" }}>
+        <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>
+        <span className="tnum" style={{ fontSize: 24, lineHeight: "30px", fontWeight: 800 }}>
+          {value}
+        </span>
+        <span className="muted-72" style={{ fontSize: 11 }}>
+          {sub}
+        </span>
+      </div>
+    );
+    return (
+      <Section style={style} en="TOU meter" th={`มิเตอร์ TOU · since ${since} · ${s.valid.length} bills`} note={noteParts.filter(Boolean).join(" ")}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "var(--color-divider)", borderTop: "1px solid var(--color-text)", borderBottom: "1px solid var(--color-text)" }}>
+          {fact("On-peak share", pct(s.onShare), `break-even ${pct(s.breakEven)}`, true)}
+          {fact(cheaper ? "Saved by TOU" : "Extra cost of TOU", thb(Math.abs(s.saved)), `avg ${thb(Math.abs(s.avgSaved))} per bill`)}
+        </div>
+        <LegendRow>
+          <Legend color={COLORS.grid}>On-peak share</Legend>
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <span style={{ width: 2, height: 12, background: "var(--color-text)" }} />
+            Break-even
+          </span>
+          <span className="muted-72" style={{ fontSize: 11 }}>
+            Left of the line = TOU is cheaper
+          </span>
+        </LegendRow>
+        <div>
+          <div className="muted-72" style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr) 56px", gap: 10, fontSize: 10, paddingBottom: 4 }}>
+            <span>BILL</span>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>0 %</span>
+              <span>25 %</span>
+              <span>50 %</span>
+            </div>
+            <span style={{ textAlign: "right" }}>SAVED</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--color-text)" }}>
+            {rows.map((r) => (
+              <div key={r.key} style={{ display: "flex", flexDirection: "column", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 14%, transparent)" }}>
+                <button
+                  type="button"
+                  onClick={() => r.valid && setOpen(openKey === r.key ? "" : r.key)}
+                  aria-expanded={r.valid ? openKey === r.key : undefined}
+                  style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr) 56px", gap: 10, alignItems: "center", minHeight: 40, background: "none", border: 0, padding: 0, font: "inherit", color: "inherit", textAlign: "left", cursor: r.valid ? "pointer" : "default" }}
+                >
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>{mon(r)}</span>
+                  {r.valid ? (
+                    <div style={{ position: "relative", height: 10, background: "color-mix(in srgb, var(--color-text) 7%, transparent)" }}>
+                      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.min(1, (r.onShare * 100) / scale) * 100}%`, background: COLORS.grid }} />
+                      <div style={{ position: "absolute", left: `${Math.min(1, (r.breakEven * 100) / scale) * 100}%`, top: -3, bottom: -3, width: 2, background: "var(--color-text)" }} />
+                    </div>
+                  ) : (
+                    <div className="hatch" style={{ height: 18, display: "flex", alignItems: "center", paddingLeft: 6, fontSize: 10 }}>
+                      no on/off split · billed {r.units} u
+                    </div>
+                  )}
+                  <span className="tnum" style={{ fontSize: 13, fontWeight: 700, textAlign: "right" }}>
+                    {r.valid ? signedThb(r.saved) : "—"}
+                  </span>
+                </button>
+                {r.valid && openKey === r.key && (
+                  <div className="tnum" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", padding: "4px 0 12px 74px", fontSize: 12 }}>
+                    <span className="muted-72">On / off-peak</span>
+                    <span style={{ textAlign: "right" }}>
+                      {r.on} / {r.off} units
+                    </span>
+                    <span className="muted-72">TOU energy</span>
+                    <span style={{ textAlign: "right" }}>{thb(r.touEnergy)}</span>
+                    <span className="muted-72">Normal tariff</span>
+                    <span style={{ textAlign: "right" }}>{thb(r.normalEnergy)}</span>
+                    <span className="muted-72">Bill paid</span>
+                    <span style={{ textAlign: "right", fontWeight: 700 }}>{thb(r.amount)}</span>
+                  </div>
+                )}
+              </div>
+            ))}
+            <div style={{ display: "grid", gridTemplateColumns: "64px minmax(0, 1fr) 56px", gap: 10, alignItems: "center", minHeight: 40, borderBottom: "2px solid var(--color-divider)" }}>
+              <span style={{ fontSize: 12, fontWeight: 700 }}>{s.valid.length} bills</span>
+              <span style={{ fontSize: 12 }}>
+                {pct(s.onShare)} on-peak · break-even {pct(s.breakEven)}
+              </span>
+              <span className="tnum" style={{ fontSize: 13, fontWeight: 800, textAlign: "right" }}>
+                {signedThb(s.saved)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </Section>
+    );
+  }
+
   return (
     <Section
       style={style}
@@ -116,7 +215,7 @@ export function TouAnalysis({ bills, daily, mobile, style }: { bills: Bill[]; da
 
       <div style={{ display: "flex", alignItems: "flex-end", gap: "8px 16px", flexWrap: "wrap", marginTop: 8 }}>
         <span style={{ fontSize: 12, marginRight: "auto" }} className="muted">
-          Units per bill · label = saved by TOU vs the normal tariff (incl. VAT)
+          Units per bill{s.rows.length <= 7 ? " · label = saved by TOU vs the normal tariff (incl. VAT)" : " · saved by TOU per bill is in the table"}
         </span>
         <Legend color={COLORS.grid}>On-peak units</Legend>
         <Legend color={OFF_PEAK}>Off-peak units</Legend>

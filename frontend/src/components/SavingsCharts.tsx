@@ -1,91 +1,110 @@
+import { useState } from "react";
 import { AxisLabel } from "@/components/ui";
 import { niceStep } from "@/lib/charts";
 import { MONTH_ABBR, thb } from "@/lib/format";
 import { COLORS } from "@/lib/sankey";
 import type { BillRow, SavingsModel } from "@/lib/tariff";
 
-/** Bill per month (1e): hatched "without solar" bar + solid actual bill per bill month. */
-export function BillChart({ bills, utility, width = 768, height = 300 }: { bills: BillRow[]; utility: string; width?: number; height?: number }) {
-  const W = width, H = height, pl = 56, pr = 8, pt = 40, pb = 40;
+/**
+ * Bill per month (1e, revised by the design review): per bill month the estimated bill without
+ * solar as a dashed ink outline (an estimate, never the "no data" hatch) and the actual bill as a
+ * solid bar. No labels above bars: a "Saved" value strip under the axis, est. tags under the
+ * months. Fits a 350px phone. Tap / hover a month for its numbers.
+ */
+export function BillChart({ bills, utility, width = 768, height = 260, mobile }: { bills: BillRow[]; utility: string; width?: number; height?: number; mobile?: boolean }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const W = width, H = height, pl = mobile ? 30 : 56, pr = 4, pt = 12, pb = 6;
   const iw = W - pl - pr, ih = H - pt - pb;
   if (!bills.length) return <div className="state muted">No {utility} bills yet — add them to the {utility} Log and run scripts/refresh_all.sh.</div>;
-  const ymax = Math.max(1000, Math.ceil(Math.max(...bills.map((b) => b.withoutSolar)) / 1000) * 1000);
+  if (W <= 0) return <div style={{ height }} />;
+  const ymax = Math.max(1000, Math.ceil(Math.max(...bills.map((b) => Math.max(b.amount, b.withoutSolar))) / 1000) * 1000);
   const Y = (v: number) => pt + (1 - v / ymax) * ih;
-  const gw = iw / bills.length, bw = 30;
-  // Past ~8 bills the design's "Saved ฿x" labels collide: drop the word, shrink the type.
-  const dense = bills.length > 8;
+  const gw = iw / bills.length;
+  const bw = Math.max(6, Math.min(30, (gw - 8) / 2));
+  const years = new Set(bills.map((b) => b.year)).size > 1;
+  const cf = (b: BillRow) => !b.pre && !b.noData;
   const groups = bills.map((b, i) => {
-    const cx = pl + gw * i + 18;
-    return {
-      b,
-      cx,
-      cfY: b.pre ? Y(0) : Y(b.withoutSolar),
-      cfH: b.pre ? 0 : Y(0) - Y(b.withoutSolar),
-      aX: b.pre ? cx : cx + bw + 3,
-      aY: Y(b.amount),
-      aH: Y(0) - Y(b.amount),
-      sTop: (b.pre ? Y(b.amount) - 38 : Y(b.withoutSolar) - 22) - 14,
-    };
+    const x0 = pl + gw * i + (gw - (bw * 2 + 1)) / 2;
+    return { b, x0, cx: pl + gw * i + gw / 2, aX: b.pre ? x0 + (bw + 1) / 2 : x0 + bw + 1 };
   });
-  const yTicks = [];
+  const yTicks: number[] = [];
   for (let v = 0; v <= ymax; v += 1000) yTicks.push(v);
+  const k = (v: number) => (v / 1000).toFixed(1);
+  const detail = (b: BillRow) =>
+    `${MONTH_ABBR[b.month - 1]} ${b.year} · bill ${thb(b.amount)}` + (cf(b) ? ` · without solar ≈ ${thb(b.withoutSolar)} · saved ${thb(b.saved)}${b.estDays ? " (est.)" : ""}` : b.pre ? " · before solar" : " · no solar data");
 
   return (
-    <div style={{ position: "relative", width: W }}>
-      <svg width={W} height={H} style={{ display: "block", overflow: "visible" }} role="img" aria-label={`${utility} bill per month, actual vs without solar`}>
-        <defs>
-          <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <line x1="0" y1="0" x2="0" y2="6" stroke={COLORS.loss} strokeWidth={2.5} />
-          </pattern>
-        </defs>
-        {yTicks.map((v) => (
-          <line key={v} x1={pl} x2={W - pr} y1={Y(v)} y2={Y(v)} stroke="var(--color-text)" strokeOpacity={0.1} />
-        ))}
-        {groups.map((g) => (
-          <g key={g.b.key}>
-            <rect x={g.cx} y={g.cfY} width={bw} height={g.cfH} fill="url(#hatch)" stroke="var(--color-text)" strokeWidth={g.cfH ? 1.5 : 0} />
-            <rect x={g.aX} y={g.aY} width={bw} height={g.aH} fill={g.b.pre ? COLORS.before : COLORS.grid}>
-              <title>{`${MONTH_ABBR[g.b.month - 1]} ${g.b.year}: actual ${thb(g.b.amount)}${g.b.pre ? "" : `, without solar ≈ ${thb(g.b.withoutSolar)}`}`}</title>
-            </rect>
-          </g>
-        ))}
-        <line x1={pl} x2={W - pr} y1={Y(0)} y2={Y(0)} stroke="var(--color-text)" strokeWidth={2} />
-      </svg>
-      {yTicks.map((v) => (
-        <AxisLabel key={v} x={pl - 8} y={Y(v)} anchor="end">
-          ฿{v / 1000}k
-        </AxisLabel>
-      ))}
-      {groups.map((g) => (
-        <div key={g.b.key}>
-          <div className="abs" style={{ left: g.aX, top: g.aY - 10, transform: "translateY(-50%)" }}>
-            <span className="tnum" style={{ fontSize: dense ? 10 : 11, fontWeight: 600 }}>{thb(g.b.amount)}</span>
-          </div>
-          <div className="abs" style={{ left: g.cx, top: g.sTop }}>
-            <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
-              <span style={{ fontSize: dense ? 11 : 12, fontWeight: 800 }}>
-                {g.b.pre ? "Before solar" : g.b.noData ? "No data" : dense ? thb(g.b.saved) : `Saved ${thb(g.b.saved)}`}
-                {g.b.estDays > 0 && !g.b.pre && !g.b.noData ? " est." : ""}
-              </span>
-              {!g.b.pre && !g.b.noData && (
-                <span className="muted-72" style={{ fontSize: 11 }}>
-                  −{Math.round((g.b.saved / g.b.withoutSolar) * 100)} %
-                </span>
+    <div>
+      <div style={{ position: "relative", width: W }}>
+        <svg width={W} height={H} style={{ display: "block", overflow: "visible" }} role="img" aria-label={`${utility} bill per month, actual vs without solar`}>
+          {yTicks.map((v) => (
+            <line key={v} x1={pl} x2={W - pr} y1={Y(v)} y2={Y(v)} stroke="var(--color-text)" strokeOpacity={0.1} />
+          ))}
+          {groups.map((g) => (
+            <g key={g.b.key} onClick={() => setPicked(detail(g.b))} style={{ cursor: "pointer" }}>
+              <rect x={pl + gw * groups.indexOf(g)} y={pt} width={gw} height={ih} fill="transparent" />
+              {cf(g.b) && (
+                <path
+                  d={`M${g.x0 + 0.75},${Y(0)}V${Y(g.b.withoutSolar) + 0.75}H${g.x0 + bw - 0.75}V${Y(0)}`}
+                  fill="none"
+                  stroke="var(--color-text)"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                />
               )}
-            </div>
-          </div>
-          <div className="abs" style={{ left: g.cx, top: H - 34 }}>
-            <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.25 }}>
-              <span style={{ fontSize: 12, fontWeight: 600 }}>
-                {MONTH_ABBR[g.b.month - 1]} {g.b.year}
+              <rect x={g.aX} y={Y(g.b.amount)} width={bw} height={Y(0) - Y(g.b.amount)} fill={g.b.pre ? COLORS.before : COLORS.grid} />
+              <title>{detail(g.b)}</title>
+            </g>
+          ))}
+          <line x1={pl} x2={W - pr} y1={Y(0)} y2={Y(0)} stroke="var(--color-text)" strokeWidth={mobile ? 1 : 2} />
+        </svg>
+        {yTicks.map((v) => (
+          <AxisLabel key={v} x={pl - 6} y={Y(v)} anchor="end">
+            {mobile ? `${v / 1000}k` : `฿${v / 1000}k`}
+          </AxisLabel>
+        ))}
+      </div>
+      {/* Month labels (+ est. tags), then the Saved strip — one cell per bill. */}
+      <div style={{ position: "relative", width: W, height: mobile ? 30 : 34, marginTop: 4 }}>
+        {groups.map((g) => (
+          <div key={g.b.key} style={{ position: "absolute", left: pl + gw * groups.indexOf(g), width: gw, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, lineHeight: 1.2 }}>
+            <span style={{ fontSize: mobile ? 10 : 12, fontWeight: 600, whiteSpace: "nowrap" }}>
+              {mobile ? MONTH_ABBR[g.b.month - 1][0] : `${MONTH_ABBR[g.b.month - 1]}${years ? ` ${String(g.b.year).slice(2)}` : ""}`}
+            </span>
+            {g.b.estDays > 0 && cf(g.b) ? (
+              <span className="tag-est" style={{ fontSize: mobile ? 8 : 10, padding: "0 2px", lineHeight: "12px" }}>
+                est.
               </span>
-              <span className="muted-72" style={{ fontSize: 10 }}>
-                {g.b.units} units
-              </span>
-            </div>
+            ) : (
+              !mobile && (
+                <span className="muted-72" style={{ fontSize: 10 }}>
+                  {g.b.units} u
+                </span>
+              )
+            )}
           </div>
+        ))}
+      </div>
+      <div style={{ position: "relative", width: W, height: 18, marginTop: 4, paddingTop: 4, borderTop: "1px solid color-mix(in srgb, var(--color-text) 14%, transparent)" }}>
+        <span style={{ position: "absolute", left: 0, top: 5, fontSize: 10, fontWeight: 700 }}>Saved</span>
+        {groups.map((g) => (
+          <span key={g.b.key} className="tnum" style={{ position: "absolute", left: pl + gw * groups.indexOf(g), width: gw, top: 5, textAlign: "center", fontSize: 10, whiteSpace: "nowrap" }}>
+            {cf(g.b) ? (mobile ? k(g.b.saved) : thb(g.b.saved)) : "—"}
+          </span>
+        ))}
+      </div>
+      {mobile && bills.length > 1 && (
+        <div className="muted-72" style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginTop: 4, paddingLeft: pl }}>
+          <span>{`${MONTH_ABBR[bills[0].month - 1]} ${bills[0].year}`}</span>
+          <span>฿k · tap a month for the bill</span>
+          <span>{`${MONTH_ABBR[bills[bills.length - 1].month - 1]} ${bills[bills.length - 1].year}`}</span>
         </div>
-      ))}
+      )}
+      {picked && (
+        <div className="caption" style={{ marginTop: 6, color: "var(--color-text)", fontWeight: 600 }}>
+          {picked}
+        </div>
+      )}
     </div>
   );
 }

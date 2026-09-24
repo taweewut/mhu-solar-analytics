@@ -347,14 +347,20 @@ export function savingsKpis(s: SavingsModel, utility: string): Kpi[] {
       sub: first ? `per month since ${MONTH_FULL[first.month - 1]}${years ? ` ${first.year}` : ""}` : "",
       info: ["Saved so far ÷ the number of bills since switch-on. Payback uses this to project the date."],
     },
-    {
-      label: cur ? `${MONTH_FULL[cur.month - 1]} so far` : "This month",
-      th: "เดือนนี้ (ประมาณการ)",
-      value: cur ? thb(cur.saved) : "—",
-      sub: cur ? "est. · bill not in yet" : "Bill already logged",
-      info: cur
-        ? ["Estimated saving for the month so far, before the bill arrives:", "the bill for (home load + the usual meter gap) − the bill for (grid import + meter gap), at this month's Ft."]
-        : ["Shows an estimate while the current month has inverter data but no bill yet."],
-    },
+    cur
+      ? {
+          label: `${MONTH_FULL[cur.month - 1]} so far`,
+          th: "เดือนนี้ (ประมาณการ)",
+          value: thb(cur.saved),
+          sub: "est. · bill not in yet",
+          info: ["Estimated saving for the month so far, before the bill arrives:", "the bill for (home load + the usual meter gap) − the bill for (grid import + meter gap), at this month's Ft."],
+        }
+      : {
+          label: latest ? `Last bill · ${MONTH_ABBR[latest.month - 1]} ${latest.year}` : "Last bill",
+          th: "บิลล่าสุด",
+          value: latest ? thb(latest.amount) : "—",
+          sub: latest ? `saved ${thb(latest.saved)}${latest.estDays ? " (est.)" : ""}` : "no bill since solar yet",
+          info: ["The latest bill and what it saved against the estimated bill without solar. Once a new month has inverter data, this card estimates it until the bill arrives."],
+        },
   ];
 }
