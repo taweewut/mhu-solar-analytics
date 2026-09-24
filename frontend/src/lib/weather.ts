@@ -55,7 +55,15 @@ export function weatherDay(rows: WeatherRow[], date: string): WeatherHour[] {
  * thunderstorms or rain if it rained for 2+ daylight hours, else mostly sunny / partly
  * cloudy / mostly cloudy by the majority — plus the day's total rain.
  */
-export function daySummary(hours: WeatherHour[], rise = 360, set = 1080): { en: string; th: string; rainMm: number } | null {
+export interface DaySummary {
+  en: string;
+  th: string;
+  rainMm: number;
+  /** The day's icon: storm, rain, clear, cloudy or partly. */
+  sky: Sky;
+}
+
+export function daySummary(hours: WeatherHour[], rise = 360, set = 1080): DaySummary | null {
   const day = hours.filter((x) => x.cond && x.h * 60 + 30 >= rise && x.h * 60 + 30 <= set);
   if (!day.length) return null;
   const n = (skies: Sky[]) => day.filter((x) => skies.includes(x.cond!.sky)).length;
@@ -63,15 +71,31 @@ export function daySummary(hours: WeatherHour[], rise = 360, set = 1080): { en: 
   const wet = n(["drizzle", "rain", "storm"]);
   const sunny = n(["clear", "mostly"]);
   const cloudy = n(["cloudy", "fog"]) + wet;
-  const base =
+  const base: { en: string; th: string; sky: Sky } =
     n(["storm"]) > 0
-      ? { en: "Thunderstorms", th: "มีพายุฝนฟ้าคะนอง" }
+      ? { en: "Thunderstorms", th: "มีพายุฝนฟ้าคะนอง", sky: "storm" }
       : wet >= 2
-        ? { en: "Rainy", th: "มีฝน" }
+        ? { en: "Rainy", th: "มีฝน", sky: "rain" }
         : sunny >= day.length / 2
-          ? { en: "Mostly sunny", th: "แดดดีเป็นส่วนใหญ่" }
+          ? { en: "Mostly sunny", th: "แดดดีเป็นส่วนใหญ่", sky: "clear" }
           : cloudy >= day.length / 2
-            ? { en: "Mostly cloudy", th: "เมฆมากเป็นส่วนใหญ่" }
-            : { en: "Partly cloudy", th: "มีเมฆบางส่วน" };
-  return rainMm >= 0.2 ? { en: `${base.en} · ${rainMm} mm rain`, th: `${base.th} · ฝน ${rainMm} มม.`, rainMm } : { ...base, rainMm };
+            ? { en: "Mostly cloudy", th: "เมฆมากเป็นส่วนใหญ่", sky: "cloudy" }
+            : { en: "Partly cloudy", th: "มีเมฆบางส่วน", sky: "partly" };
+  return rainMm >= 0.2 ? { en: `${base.en} · ${rainMm} mm rain`, th: `${base.th} · ฝน ${rainMm} มม.`, rainMm, sky: base.sky } : { ...base, rainMm };
+}
+
+/** One summary per date for a set of dates (the Day-by-day table), from one pass over the rows. */
+export function dailyWeather(rows: WeatherRow[], dates: string[]): Map<string, DaySummary> {
+  const want = new Set(dates);
+  const byDay = new Map<string, WeatherRow[]>();
+  for (const r of rows) {
+    const d = r.time.slice(0, 10);
+    if (want.has(d)) byDay.set(d, [...(byDay.get(d) ?? []), r]);
+  }
+  const out = new Map<string, DaySummary>();
+  byDay.forEach((list, d) => {
+    const s = daySummary(weatherDay(list, d));
+    if (s) out.set(d, s);
+  });
+  return out;
 }

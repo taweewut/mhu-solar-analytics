@@ -17,8 +17,9 @@ export interface ValueStrip {
  * the axis prints one number per group — e.g. self-sufficiency fixed at 0–100 % instead of a
  * truncated right axis. All text is HTML overlaid on the SVG.
  */
-export function GroupedBarChart(props: GroupBarsInput & { label: string; strip?: ValueStrip }) {
-  const { label, width, height, groups, fmt, ticks, right, inset, strip } = props;
+/** `icons`: one small node per group (e.g. the day's weather), in a row under the x labels. */
+export function GroupedBarChart(props: GroupBarsInput & { label: string; strip?: ValueStrip; icons?: (React.ReactNode | null)[] }) {
+  const { label, width, height, groups, fmt, ticks, right, inset, strip, icons } = props;
   const hatch = useId().replace(/:/g, "");
   const g = useMemo(
     () => (width > 0 ? groupBars({ width, height, groups, fmt, ticks, right, inset }) : null),
@@ -85,6 +86,17 @@ export function GroupedBarChart(props: GroupBarsInput & { label: string; strip?:
           </div>
         </div>
       ))}
+      {icons && (
+        <div style={{ position: "relative", height: 18, marginTop: 2 }}>
+          {g.slots.map((sl, i) =>
+            icons[i] ? (
+              <div key={i} style={{ position: "absolute", left: sl.x, width: sl.w, top: 0, display: "flex", justifyContent: "center", color: "var(--muted-72)" }}>
+                {icons[i]}
+              </div>
+            ) : null,
+          )}
+        </div>
+      )}
       {strip && (
         <div style={{ position: "relative", height: 32, marginTop: 4, borderTop: "1px solid color-mix(in srgb, var(--color-text) 14%, transparent)" }}>
           <span className="abs" style={{ left: 0, width: g.pl - 8, top: 9, textAlign: "right", whiteSpace: "normal", fontSize: 10, fontWeight: 700, lineHeight: 1.1 }}>

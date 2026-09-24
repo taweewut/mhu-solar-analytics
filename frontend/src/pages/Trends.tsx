@@ -22,7 +22,7 @@ import {
   trendSummary,
   type TrendMode,
 } from "@/lib/trends";
-import type { DailyRow } from "@/lib/types";
+import type { DailyRow, WeatherRow } from "@/lib/types";
 
 export const MODES: [TrendMode, string, string][] = [
   ["day", "Per day", "ต่อวัน"],
@@ -41,7 +41,7 @@ const mostlyPvEst = (m: { pvEstDays: number; days: number }) => m.pvEstDays * 2 
 /** Months the monthly charts show at once; longer histories get a range picker. */
 const MAX_MONTHS = 12;
 
-export function Trends({ mobile, daily, model }: { mobile: boolean; daily: DailyRow[]; model: Model }) {
+export function Trends({ mobile, daily, model, weather = [] }: { mobile: boolean; daily: DailyRow[]; model: Model; weather?: WeatherRow[] }) {
   const { mode, setMode } = useTrendMode();
   const { home } = useHome();
   const kwp = home.kwp;
@@ -232,7 +232,7 @@ export function Trends({ mobile, daily, model }: { mobile: boolean; daily: Daily
         </Section>
       </div>
 
-      <MonthDayBreakdown daily={daily} fiveMinDates={model.dates} mobile={mobile} style={{ margin: `28px ${pad}px 0` }} />
+      <MonthDayBreakdown daily={daily} weather={weather} fiveMinDates={model.dates} mobile={mobile} style={{ margin: `28px ${pad}px 0` }} />
     </>
   );
 }

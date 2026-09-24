@@ -73,7 +73,7 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
   else if (route === "overview") body = <Overview mobile={mobile} fiveMin={fiveMin} daily={daily} model={model} caps={caps} />;
   else if (route === "day") body = <Day mobile={mobile} fiveMin={fiveMin} model={model} date={params.get("d")} weather={weather} />;
   else if (route === "savings") body = <Savings mobile={mobile} model={model} bills={bills} daily={daily} />;
-  else if (route === "trends") body = <Trends mobile={mobile} daily={daily} model={model} />;
+  else if (route === "trends") body = <Trends mobile={mobile} daily={daily} model={model} weather={weather} />;
   else if (route === "battery") body = <Battery mobile={mobile} fiveMin={fiveMin} daily={daily} bms={bms} model={model} paused={feed?.kind === "paused"} />;
   else body = <Health mobile={mobile} fiveMin={fiveMin} bms={bms} model={model} />;
 

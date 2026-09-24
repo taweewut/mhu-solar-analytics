@@ -12,7 +12,9 @@ import { useWidth } from "@/lib/layout";
 import { dataMonths, monthDays, monthTotal, type DayRow } from "@/lib/monthDays";
 import { href } from "@/lib/router";
 import { COLORS } from "@/lib/sankey";
-import type { DailyRow } from "@/lib/types";
+import type { DailyRow, WeatherRow } from "@/lib/types";
+import { dailyWeather, type DaySummary } from "@/lib/weather";
+import { SkyIcon } from "@/components/Weather";
 
 type DayData = NonNullable<DayRow["data"]>;
 
@@ -68,7 +70,7 @@ function columnsFor(battery: boolean, exports: boolean): Column[] {
  * One month, day by day, from the inverter's daily report: daily bars with the
  * self-sufficiency line, and a table with a month total that can be saved as CSV.
  */
-export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { daily: DailyRow[]; fiveMinDates: string[]; mobile: boolean; style?: React.CSSProperties }) {
+export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style, weather = [] }: { daily: DailyRow[]; fiveMinDates: string[]; mobile: boolean; style?: React.CSSProperties; weather?: WeatherRow[] }) {
   const { home } = useHome();
   const months = useMemo(() => dataMonths(daily), [daily]);
   const [picked, setPicked] = useState<string | null>(null);
@@ -80,7 +82,11 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
   const withFive = useMemo(() => new Set(fiveMinDates), [fiveMinDates]);
   const exports = useMemo(() => daily.some((d) => (d.to_grid_kwh ?? 0) > 0), [daily]);
   const cols = useMemo(() => columnsFor(home.battery != null, exports), [home.battery, exports]);
-  const grid = `1.1fr ${cols.map((c) => c.width).join(" ")}`;
+  // The day's weather at the site (Open-Meteo): an icon under each day's bars, a table column.
+  const wmap = useMemo(() => dailyWeather(weather, days.map((d) => d.date)), [weather, days]);
+  const hasWx = wmap.size > 0;
+  const monthRain = Math.round([...wmap.values()].reduce((a, x) => a + x.rainMm, 0) * 10) / 10;
+  const grid = `1.1fr ${hasWx ? "0.9fr " : ""}${cols.map((c) => c.width).join(" ")}`;
   const [y, m] = month.split("-").map(Number);
   const name = `${MONTH_FULL[m - 1]} ${y}`;
 
@@ -105,9 +111,11 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
   }, [days, home.dataGaps, mobile]);
 
   const save = () => {
-    const rows = days.map((d) => [d.date, ...cols.map((c) => (d.data ? c.csvCell(d.data) : "")), d.est ? "yes" : ""]);
-    rows.push([`Total ${month} (${total.days} days)`, ...cols.map((c) => c.csvCell(total)), estCount ? `${estCount} days` : ""]);
-    downloadCsv(`${home.id}-solar-${month}-daily.csv`, toCsv(["Date", ...cols.map((c) => c.csv), "Estimated"], rows));
+    const wx = (date: string) => (hasWx ? [wmap.get(date)?.en.split(" · ")[0] ?? "", wmap.get(date)?.rainMm.toFixed(1) ?? ""] : []);
+    const rows = days.map((d) => [d.date, ...wx(d.date), ...cols.map((c) => (d.data ? c.csvCell(d.data) : "")), d.est ? "yes" : ""]);
+    rows.push([`Total ${month} (${total.days} days)`, ...(hasWx ? ["", monthRain.toFixed(1)] : []), ...cols.map((c) => c.csvCell(total)), estCount ? `${estCount} days` : ""]);
+    const head = ["Date", ...(hasWx ? ["Weather", "Rain mm"] : []), ...cols.map((c) => c.csv), "Estimated"];
+    downloadCsv(`${home.id}-solar-${month}-daily.csv`, toCsv(head, rows));
   };
 
   const estCount = days.filter((d) => d.est).length;
@@ -168,10 +176,19 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
         </span>
       </LegendRow>
       <div ref={ref}>
-        <GroupedBarChart label={`Solar, load and grid per day, ${name}`} width={chartW} height={mobile ? 220 : 280} groups={chart.groups} fmt={(v) => v.toFixed(0)} strip={chart.strip} inset={mobile ? 1 : 3} />
+        <GroupedBarChart
+          label={`Solar, load and grid per day, ${name}`}
+          width={chartW}
+          height={mobile ? 220 : 280}
+          groups={chart.groups}
+          fmt={(v) => v.toFixed(0)}
+          strip={chart.strip}
+          inset={mobile ? 1 : 3}
+          icons={hasWx ? days.map((d) => wxIcon(wmap.get(d.date), mobile ? 10 : 13)) : undefined}
+        />
       </div>
       {mobile && (
-        <MobileDays days={days} total={total} month={m} estCount={estCount} withFive={withFive} daily={daily} />
+        <MobileDays days={days} total={total} month={m} estCount={estCount} withFive={withFive} daily={daily} wmap={wmap} monthRain={monthRain} />
       )}
 
       {!mobile && (
@@ -179,6 +196,7 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
         <div style={{ display: "flex", flexDirection: "column", fontSize: 14, minWidth: 110 + cols.length * 85 }}>
           <div className="table-head" style={{ display: "grid", gridTemplateColumns: grid, gap: 8, padding: "8px 0" }}>
             <span>Date</span>
+            {hasWx && <span>Weather</span>}
             {cols.map((c) => (
               <span key={c.head} style={{ textAlign: "right" }}>
                 {c.head}
@@ -193,6 +211,7 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
                   {withFive.has(d.date) ? <a href={href("day", { d: d.date })}>{label}</a> : label}
                   {d.est && <EstTag title={`Estimated: ${estimateNote(daily.find((x) => x.date === d.date)!, home.utility)}`} />}
                 </span>
+                {hasWx && <WxCell s={wmap.get(d.date)} />}
                 {d.data ? (
                   cols.map((c) => (
                     <span key={c.head} style={{ textAlign: "right" }} title={c.title?.(d.data!)}>
@@ -212,6 +231,7 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
               {MONTH_ABBR[m - 1]} · {total.days} days
               {estCount > 0 && <EstTag title={`${estCount} estimated days`} />}
             </span>
+            {hasWx && <span>{monthRain >= 0.2 ? `${monthRain} mm` : ""}</span>}
             {cols.map((c) => (
               <span key={c.head} style={{ textAlign: "right" }} title={c.title?.(total)}>
                 {c.cell(total)}
@@ -229,7 +249,7 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
  * Mobile day rows (review 3b §5): line 1 = date, est. tag and the day's solar; line 2 = load,
  * grid import and self-sufficiency. Days with 5-minute data link to the Day view.
  */
-function MobileDays({ days, total, month, estCount, withFive, daily }: { days: DayRow[]; total: ReturnType<typeof monthTotal>; month: number; estCount: number; withFive: Set<string>; daily: DailyRow[] }) {
+function MobileDays({ days, total, month, estCount, withFive, daily, wmap, monthRain }: { days: DayRow[]; total: ReturnType<typeof monthTotal>; month: number; estCount: number; withFive: Set<string>; daily: DailyRow[]; wmap: Map<string, DaySummary>; monthRain: number }) {
   const { home } = useHome();
   return (
     <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--color-text)" }}>
@@ -239,6 +259,11 @@ function MobileDays({ days, total, month, estCount, withFive, daily }: { days: D
           <div key={d.date} className={`mrow${d.data ? "" : " hatch"}`}>
             <div className="mrow-line">
               <span style={{ fontSize: 14, fontWeight: 600 }}>{withFive.has(d.date) ? <a href={href("day", { d: d.date })}>{label}</a> : label}</span>
+              {wmap.get(d.date) && (
+                <span className="muted-72" title={wmap.get(d.date)!.en} style={{ display: "inline-flex", alignSelf: "center" }}>
+                  <SkyIcon sky={wmap.get(d.date)!.sky} size={13} />
+                </span>
+              )}
               {d.est && <EstTag style={{ marginLeft: 0 }} title={`Estimated: ${estimateNote(daily.find((x) => x.date === d.date)!, home.utility)}`} />}
               <span className="mrow-num">{d.data?.pv != null ? `${d.data.pv.toFixed(1)} kWh` : "—"}</span>
             </div>
@@ -246,6 +271,7 @@ function MobileDays({ days, total, month, estCount, withFive, daily }: { days: D
               {d.data
                 ? `Load ${d.data.load?.toFixed(1) ?? "—"} · grid ${d.data.grid?.toFixed(2) ?? "—"} kWh · self-suff. ${pct(d.data.ss)}`
                 : (gapOn(home.dataGaps, d.date)?.reason.toLowerCase() ?? "no data")}
+              {(wmap.get(d.date)?.rainMm ?? 0) >= 0.2 ? ` · rain ${wmap.get(d.date)!.rainMm} mm` : ""}
             </span>
           </div>
         );
@@ -258,8 +284,28 @@ function MobileDays({ days, total, month, estCount, withFive, daily }: { days: D
           {estCount > 0 && <EstTag style={{ marginLeft: 0 }} title={`${estCount} estimated days`} />}
           <span className="mrow-num">{total.pv != null ? `${total.pv.toFixed(1)} kWh` : "—"}</span>
         </div>
-        <span className="caption">{`Load ${total.load?.toFixed(1) ?? "—"} · grid ${total.grid?.toFixed(2) ?? "—"} kWh · self-suff. ${pct(total.ss)}`}</span>
+        <span className="caption">{`Load ${total.load?.toFixed(1) ?? "—"} · grid ${total.grid?.toFixed(2) ?? "—"} kWh · self-suff. ${pct(total.ss)}${monthRain >= 0.2 ? ` · rain ${monthRain} mm` : ""}`}</span>
       </div>
     </div>
+  );
+}
+
+const wxIcon = (s: DaySummary | undefined, size: number) =>
+  s ? (
+    <span title={s.en} style={{ display: "inline-flex" }}>
+      <SkyIcon sky={s.sky} size={size} />
+    </span>
+  ) : null;
+
+/** Weather table cell: the day's icon and its rain, the summary on hover. */
+function WxCell({ s }: { s?: DaySummary }) {
+  if (!s) return <span className="muted-72">—</span>;
+  return (
+    <span title={s.en} className="muted-72" style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+      <SkyIcon sky={s.sky} size={14} />
+      <span className="tnum" style={{ fontSize: 12 }}>
+        {s.rainMm >= 0.2 ? `${s.rainMm} mm` : ""}
+      </span>
+    </span>
   );
 }
