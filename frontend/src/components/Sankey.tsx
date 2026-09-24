@@ -40,6 +40,9 @@ export function Sankey({ flows, width, height, variant }: Props) {
   const opacity = (l: (typeof layout.links)[number]) =>
     hoveredNode ? nodeLinkOpacity(l, hoveredNode.key) : linkOpacity(l.i, hoveredLink ? hoveredLink.i : null);
   const zeroText = zeroLegend(layout);
+  // On a phone, small nodes (< 14 % of the height) aren't labelled in the diagram, where their
+  // labels collide; they're listed under it as a value legend instead (design review).
+  const small = new Set(v.compact ? layout.nodes.filter((n) => n.h < 0.14 * layout.height).map((n) => n.key) : []);
   // Tap on touch screens: same highlight; tapping the same thing again clears it.
   const toggle = (h: NonNullable<Hover>) => setHov((cur) => (JSON.stringify(cur) === JSON.stringify(h) ? null : h));
 
@@ -83,7 +86,7 @@ export function Sankey({ flows, width, height, variant }: Props) {
           />
         ))}
       </svg>
-      {layout.nodes.map((n) => (
+      {layout.nodes.filter((n) => !small.has(n.key)).map((n) => (
         <div
           key={n.key}
           style={{
@@ -113,6 +116,21 @@ export function Sankey({ flows, width, height, variant }: Props) {
           </div>
         </div>
       ))}
+      {small.size > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px", marginTop: 10, fontSize: 12 }}>
+          {layout.nodes
+            .filter((n) => small.has(n.key))
+            .map((n) => (
+              <span key={n.key} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                <span style={{ width: 10, height: 10, background: n.color, flex: "none" }} />
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{n.name}</span>
+                <span className="tnum" style={{ marginLeft: "auto", fontWeight: 700, whiteSpace: "nowrap" }}>
+                  {n.val}
+                </span>
+              </span>
+            ))}
+        </div>
+      )}
       {zeroText && (
         <div className="muted" style={{ marginTop: 10, display: "flex", alignItems: "flex-start", gap: 8, fontSize: v.sub + 1, lineHeight: 1.4 }}>
           <span style={{ flex: "none", width: 18, marginTop: "0.7em", borderTop: "1.5px dotted color-mix(in srgb, var(--color-text) 60%, transparent)" }} />

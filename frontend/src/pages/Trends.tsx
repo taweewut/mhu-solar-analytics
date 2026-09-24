@@ -4,8 +4,8 @@ import { KpiGrid, type Kpi } from "@/components/Kpis";
 import { withInfo } from "@/lib/kpis";
 import { MonthDayBreakdown } from "@/components/MonthDayBreakdown";
 import { PageTitle } from "@/components/ui";
-import { EstLegend, Legend, Section, Seg } from "@/components/ui2";
-import type { BarGroup, RightAxis } from "@/lib/charts";
+import { EstLegend, Legend, LegendRow, Section, Seg } from "@/components/ui2";
+import type { BarGroup } from "@/lib/charts";
 import { dm, dmy, energy, energyText, MONTH_ABBR } from "@/lib/format";
 import { useWidth } from "@/lib/layout";
 import type { Model } from "@/lib/model";
@@ -57,7 +57,20 @@ export function Trends({ mobile, daily, model }: { mobile: boolean; daily: Daily
     () => (!long ? allSlots : range === "last12" ? allSlots.slice(-MAX_MONTHS) : allSlots.filter((m) => String(m.year) === range)),
     [allSlots, long, range],
   );
-  const s = useMemo(() => trendSummary(daily), [daily]);
+  // KPIs follow the range picker (review P1): same months as the charts.
+  const inRange = useMemo(() => {
+    if (!long) return daily;
+    const keys = new Set(slots.map((m) => m.key));
+    return daily.filter((d) => keys.has(d.date.slice(0, 7)));
+  }, [daily, slots, long]);
+  const s = useMemo(() => trendSummary(inRange), [inRange]);
+  const first = slots.find((m) => m.data) ?? slots[0];
+  const lastSlot = slots.at(-1);
+  const rangeText = !long
+    ? `since ${dmy(model.commissioned)}`
+    : first && lastSlot
+      ? `${MONTH_ABBR[first.month - 1]} ${first.year} – ${MONTH_ABBR[lastSlot.month - 1]} ${lastSlot.year}`
+      : "";
   const pad = mobile ? 20 : 48;
 
   const kpis: Kpi[] = withInfo([
@@ -65,14 +78,14 @@ export function Trends({ mobile, daily, model }: { mobile: boolean; daily: Daily
       label: "Solar produced",
       th: "ผลิตไฟสะสม",
       ...energy(s.pv),
-      sub: s.best ? `Best month ${MONTH_ABBR[s.best.month - 1]} · ${int(s.best.pv)} kWh` : "",
+      sub: `${rangeText}${s.best ? ` · best ${MONTH_ABBR[s.best.month - 1]} ${int(s.best.pv)} kWh` : ""}`,
     },
     {
       label: "Specific yield",
       th: "ผลผลิตจำเพาะ",
       value: int(specificYield(s.pv, kwp)),
       unit: "kWh/kWp",
-      sub: `${f2(specificYieldPerDay(s.pv, s.days, kwp))} kWh/kWp per day avg`,
+      sub: `${f2(specificYieldPerDay(s.pv, s.days, kwp))} kWh/kWp per day · ${long ? rangeText : "avg"}`,
     },
     {
       label: "Self-sufficiency",
@@ -89,12 +102,12 @@ export function Trends({ mobile, daily, model }: { mobile: boolean; daily: Daily
       th: `ซื้อไฟ ${home.utility}`,
       value: s.meterDays ? f1(s.grid / s.meterDays) : "—",
       unit: "kWh/day",
-      sub: `${energyText(s.grid)} since ${dmy(model.commissioned)}`,
+      sub: `${energyText(s.grid)} ${rangeText}`,
     },
   ], [
-      ["All the solar the panels produced since switch-on (sum of the inverter's daily report).", "Best month = the month with the most kWh in total."],
+      [`All the solar the panels produced ${long ? "in the months shown" : "since switch-on"} (sum of the inverter's daily report).`, "Best month = the month with the most kWh in total."],
       [`Solar produced ÷ the array size (${kwp} kWp): kWh per kWp. It compares output independent of system size.`, "Per day avg ÷ days with data; a healthy Thai rooftop gives roughly 3.5–4.5 kWh/kWp/day in the dry season, less in the rains."],
-      ["1 − grid import ÷ home load since switch-on: the share of the home's electricity that didn't come from the grid.", "Lowest / highest = the months with the lowest and highest share."],
+      [`1 − grid import ÷ home load ${long ? "in the months shown" : "since switch-on"}: the share of the home's electricity that didn't come from the grid.`, "Lowest / highest = the months with the lowest and highest share."],
       [`Average electricity bought from ${home.utility} per day, measured by the inverter's meter (days with meter readings).`, `Your ${home.utility} bill can differ by the meter gap — see Savings.`],
     ]);
 
@@ -104,9 +117,11 @@ export function Trends({ mobile, daily, model }: { mobile: boolean; daily: Daily
     // Load and grid come from the meter, which can be missing for days that have PV: per day
     // they're averaged over metered days, and a month with no meter data has no bars for them.
     const meter = (m: NonNullable<(typeof slots)[number]["data"]>, v: number) => (m.meterDays ? v / div(m.meterDays) : null);
+    // On a phone with many months: one-letter labels and no sub line (the chart fits 350px).
+    const tight = mobile && slots.length > 7;
     const groups: BarGroup[] = slots.map((m) => ({
-      label: m.label,
-      sub: m.data ? (m.data.estDays ? `${m.data.estDays} d est.` : `${m.data.days} days`) : "",
+      label: tight ? m.label[0] : m.label,
+      sub: tight ? "" : m.data ? (m.data.estDays ? `${m.data.estDays} d est.` : `${m.data.days} days`) : "",
       missingLabel: gapInMonth(home.dataGaps, m.key) ? "offline" : undefined,
       top: m.data ? fk(m.data.pv / div(m.data.days)) : undefined,
       vals: m.data
@@ -117,35 +132,31 @@ export function Trends({ mobile, daily, model }: { mobile: boolean; daily: Daily
           ]
         : null,
     }));
+    // Self-sufficiency as its own strip under the bars, fixed at 0–100 % with the values
+    // printed — never a truncated second axis that turns 94 → 98 % into a full swing (review P1).
     const ss = slots.map((m) => (m.data ? monthSelfSufficiency(m.data) : null));
-    // 90–100 % in the design; wider (10-point ticks) for a home that relies on the grid more.
-    const lo = Math.min(90, ...ss.filter((v): v is number => v != null));
-    const step = lo < 80 ? 10 : 5;
-    const lowest = Math.floor(lo / step) * step;
-    const ticks: number[] = [];
-    for (let v = lowest; v <= 100; v += step) ticks.push(v);
-    const right: RightAxis = { min: lowest, max: 100, ticks, vals: ss, fmt: (v) => `${v} %` };
-    return { groups, right, fmt: fk };
-  }, [slots, per, home.dataGaps]);
+    const strip = { label: mobile ? "Self" : "Self-suff.", vals: ss, fmt: (v: number) => `${Math.round(v)}${tight ? "" : " %"}`, fill: (v: number) => v / 100 };
+    return { groups, strip, fmt: fk };
+  }, [slots, per, home.dataGaps, mobile]);
 
   const pair = useMemo(
     () => ({
       sy: slots.map<BarGroup>((m) => ({
-        label: m.label,
+        label: mobile && slots.length > 7 ? m.label[0] : m.label,
         missingLabel: gapInMonth(home.dataGaps, m.key) ? "offline" : undefined,
-        sub: m.data ? `${m.data.days} days` : "",
+        sub: mobile && slots.length > 7 ? "" : m.data ? `${m.data.days} days` : "",
         top: m.data ? f2(specificYieldPerDay(m.data.pv, m.data.days, kwp)) : undefined,
         vals: m.data ? [{ v: specificYieldPerDay(m.data.pv, m.data.days, kwp), color: COLORS.pv, est: mostlyPvEst(m.data) }] : null,
       })),
       gi: slots.map<BarGroup>((m) => ({
-        label: m.label,
+        label: mobile && slots.length > 7 ? m.label[0] : m.label,
         missingLabel: gapInMonth(home.dataGaps, m.key) ? "offline" : undefined,
-        sub: m.data ? `${m.data.days} days` : "",
+        sub: mobile && slots.length > 7 ? "" : m.data ? `${m.data.days} days` : "",
         top: m.data?.meterDays ? f2(m.data.grid / m.data.meterDays) : undefined,
         vals: m.data?.meterDays ? [{ v: m.data.grid / m.data.meterDays, color: COLORS.grid, est: mostlyEst(m.data) }] : null,
       })),
     }),
-    [slots, kwp, home.dataGaps],
+    [slots, kwp, home.dataGaps, mobile],
   );
 
   const shownGaps = (home.dataGaps ?? []).filter((g) => slots.some((m) => gapInMonth([g], m.key)));
@@ -160,9 +171,10 @@ export function Trends({ mobile, daily, model }: { mobile: boolean; daily: Daily
   ]
     .filter(Boolean)
     .join(" ");
-  // On a phone the month groups need ~90px each; scroll sideways rather than squash them.
-  const mainWidth = mobile ? Math.max(mainW, slots.length * 90 + 110) : mainW;
-  const pairWidth = mobile ? Math.max(pairW, slots.length * 60 + 70) : pairW;
+  // Charts fit the screen (review P1: no cut-off charts); a phone gets thinner bars.
+  const mainWidth = mainW;
+  const pairWidth = pairW;
+  const inset = mobile ? 2 : undefined;
 
   return (
     <>
@@ -182,42 +194,41 @@ export function Trends({ mobile, daily, model }: { mobile: boolean; daily: Daily
             ))}
           </select>
         )}
-        <Seg name="tr-mode" value={mode} options={MODES} onChange={setMode} />
+        <Seg name="tr-mode" value={mode} options={MODES} onChange={setMode} mobile={mobile} />
       </div>
       <KpiGrid plain mobile={mobile} items={kpis} style={{ margin: mobile ? "16px 0 0" : `20px ${pad}px 0` }} />
 
       <Section
-        style={{ margin: `28px ${pad}px 0` }}
+        rule={false}
+        style={{ margin: `32px ${pad}px 0` }}
         en="Solar, load and grid"
         th={`ผลิต · ใช้ · ซื้อไฟ · ${per ? "kWh / day" : "kWh / month"}`}
         extra={
           <>
-            <Legend color={COLORS.pv}>Solar PV</Legend>
-            <Legend color={COLORS.load}>Home load</Legend>
-            <Legend color={COLORS.grid}>Grid import</Legend>
-            <Legend color="var(--color-text)" line>
-              Self-sufficiency % (right)
-            </Legend>
-            {estMonths.length > 0 && <EstLegend />}
+            <LegendRow>
+              <Legend color={COLORS.pv}>Solar PV</Legend>
+              <Legend color={COLORS.load}>Home load</Legend>
+              <Legend color={COLORS.grid}>Grid import</Legend>
+              {estMonths.length > 0 && <EstLegend />}
+            </LegendRow>
+            <span className="muted-72" style={{ fontSize: 11 }}>
+              Self-sufficiency: strip under the bars, 0–100 %
+            </span>
           </>
         }
         note={`${note}${note ? " " : ""}Use "Per day" to compare months fairly.`}
       >
-        <div ref={mainRef} className={mobile ? "hscroll" : undefined}>
-          <GroupedBarChart label="Solar, load and grid import per month" width={mainWidth} height={mobile ? 300 : 340} groups={main.groups} fmt={main.fmt} right={main.right} />
+        <div ref={mainRef}>
+          <GroupedBarChart label="Solar, load and grid import per month" width={mainWidth} height={mobile ? 240 : 320} groups={main.groups} fmt={main.fmt} strip={main.strip} inset={inset} />
         </div>
       </Section>
 
       <div ref={pairRef} className="pair" style={{ margin: `28px ${pad}px 0` }}>
         <Section en="Specific yield" th={`kWh ต่อ kWp ต่อวัน · ${kwp} kWp array`} note="Lower in the rainy season (May–Oct). Compare against the same month in other years.">
-          <div className={mobile ? "hscroll" : undefined}>
-            <GroupedBarChart label="Specific yield per month" width={mobile ? pairWidth : (pairW - 32) / 2} height={240} groups={pair.sy} fmt={f1} />
-          </div>
+          <GroupedBarChart label="Specific yield per month" width={mobile ? pairWidth : (pairW - 32) / 2} height={mobile ? 200 : 240} groups={pair.sy} fmt={f1} inset={inset} />
         </Section>
         <Section en="Grid import per day" th={`ซื้อไฟจาก ${home.utility} ต่อวัน · kWh`} note={`${home.inverter.brand} meter only. ${home.utility} bills run higher by the meter gap (see Savings).`}>
-          <div className={mobile ? "hscroll" : undefined}>
-            <GroupedBarChart label="Grid import per day, per month" width={mobile ? pairWidth : (pairW - 32) / 2} height={240} groups={pair.gi} fmt={f1} />
-          </div>
+          <GroupedBarChart label="Grid import per day, per month" width={mobile ? pairWidth : (pairW - 32) / 2} height={mobile ? 200 : 240} groups={pair.gi} fmt={f1} inset={inset} />
         </Section>
       </div>
 

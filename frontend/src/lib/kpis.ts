@@ -9,6 +9,9 @@ import { COLORS } from "@/lib/sankey";
 import { monthlyTotals, type BillRow, type SavingsModel } from "@/lib/tariff";
 import type { DailyRow, FiveMinRow, Home, Period } from "@/lib/types";
 
+/** Money sparklines are ink: green means battery only (design review). */
+const MONEY = "var(--color-text)";
+
 const thb2 = (v: number) => "฿" + v.toFixed(2);
 /** "Apr", or "Jun 2025" when the months shown span more than one year. */
 const monthName = (m: { year: number; month: number }, all: { year: number }[]) =>
@@ -101,19 +104,19 @@ function periodKpis({ daily, asOf, savings: s, rate, home, period, pick }: Overv
     saved =
       b && !b.pre && !b.noData
         ? {
-            label: label("Saved"), th: `ประหยัด ${whenTh}`, value: thb(b.saved), unit: b.estDays ? "est." : undefined, color: COLORS.bat,
+            label: label("Saved"), th: `ประหยัด ${whenTh}`, value: thb(b.saved), unit: b.estDays ? "est." : undefined, color: MONEY,
             spark: "",
             sub: `${home.utility} bill ${thb(b.amount)} vs ${thb(b.withoutSolar)} without solar`,
             info: [`Saving on the ${MONTH_ABBR[b.month - 1]} ${b.year} ${home.utility} bill: estimated bill without solar − the actual bill. See Savings for the method.`],
           }
         : est
           ? {
-              label: label("Saved"), th: `ประหยัด ${whenTh}`, value: thb(est.saved), unit: "est.", color: COLORS.bat, spark: "",
+              label: label("Saved"), th: `ประหยัด ${whenTh}`, value: thb(est.saved), unit: "est.", color: MONEY, spark: "",
               sub: `${MONTH_ABBR[est.month - 1]} ${+est.firstDay.slice(8)}–${+est.lastDay.slice(8)} · bill not in yet`,
               info: ["Estimated saving for the month so far — the bill isn't in yet.", `= the bill for (home load + the usual meter gap) − the bill for (grid import + meter gap), at this month's Ft.`],
             }
           : {
-              label: label("Saved"), th: `ประหยัด ${whenTh}`, value: "—", color: COLORS.bat, spark: "",
+              label: label("Saved"), th: `ประหยัด ${whenTh}`, value: "—", color: MONEY, spark: "",
               sub: b?.pre ? "before solar (baseline bill)" : b?.noData ? (gapNote ?? "no solar data for this bill") : "no bill for this month",
               info: ["Saving = estimated bill without solar − the actual bill, for the bill of this usage month."],
             };
@@ -122,7 +125,7 @@ function periodKpis({ daily, asOf, savings: s, rate, home, period, pick }: Overv
     const est = s.current && s.current.year === +pick ? s.current : null;
     const total = bills.reduce((a, b) => a + b.saved, 0) + (est?.saved ?? 0);
     saved = {
-      label: label("Saved"), th: `ประหยัด ${whenTh}`, value: thb(total), unit: est ? "est." : undefined, color: COLORS.bat,
+      label: label("Saved"), th: `ประหยัด ${whenTh}`, value: thb(total), unit: est ? "est." : undefined, color: MONEY,
       spark: spark(bills.map((b) => b.saved)),
       sub: `${bills.length} ${home.utility} bills${est ? ` + ${MONTH_ABBR[est.month - 1]} est.` : ""}`,
       info: [
@@ -132,7 +135,7 @@ function periodKpis({ daily, asOf, savings: s, rate, home, period, pick }: Overv
     };
   } else {
     saved = {
-      label: "Average saving", th: "ประหยัดเฉลี่ยต่อเดือน", value: thb(s.avgMonthly), color: COLORS.bat,
+      label: "Average saving", th: "ประหยัดเฉลี่ยต่อเดือน", value: thb(s.avgMonthly), color: MONEY,
       spark: spark(s.post.map((b) => b.saved)),
       sub: `per ${home.utility} bill, ${s.post.length} bills`,
       info: ["Total saved ÷ the number of bills since switch-on. The sparkline shows each bill's saving."],
@@ -185,7 +188,7 @@ function periodKpis({ daily, asOf, savings: s, rate, home, period, pick }: Overv
     },
     saved,
     {
-      label: "Saved lifetime", th: "ประหยัดสะสม", value: thb(s.cumTotal), color: COLORS.bat, spark: spark([0, ...cum]),
+      label: "Saved lifetime", th: "ประหยัดสะสม", value: thb(s.cumTotal), color: MONEY, spark: spark([0, ...cum]),
       sub: `Across ${s.post.length} ${home.utility} bills`,
       info: [`Sum over every ${home.utility} bill since switch-on of (estimated bill without solar − actual bill). The same whatever period is selected.`],
     },
@@ -233,7 +236,7 @@ function todayKpis(fiveMin: FiveMinRow[], daily: DailyRow[], asOf: string, s: Sa
         th: "ประหยัดเดือนนี้",
         value: thb(s.current.saved),
         unit: "est.",
-        color: COLORS.bat,
+        color: MONEY,
         spark: spark(post.filter((m) => m.meterDays).map((m) => m.load)),
         sub: `${MONTH_ABBR[s.current.month - 1]} ${+s.current.firstDay.slice(8)}–${+s.current.lastDay.slice(8)} · bill not in yet`,
       }
@@ -241,7 +244,7 @@ function todayKpis(fiveMin: FiveMinRow[], daily: DailyRow[], asOf: string, s: Sa
         label: "Saved last bill",
         th: "ประหยัดบิลล่าสุด",
         value: thb(s.post.at(-1)?.saved ?? 0),
-        color: COLORS.bat,
+        color: MONEY,
         spark: spark(s.post.map((b) => b.saved)),
         sub: s.post.length ? `${MONTH_ABBR[s.post.at(-1)!.month - 1]} ${home.utility} bill` : `No ${home.utility} bill yet`,
       };
@@ -293,7 +296,7 @@ function todayKpis(fiveMin: FiveMinRow[], daily: DailyRow[], asOf: string, s: Sa
       label: "Saved lifetime",
       th: "ประหยัดสะสม",
       value: thb(s.cumTotal),
-      color: COLORS.bat,
+      color: MONEY,
       spark: spark([0, ...cum]),
       sub: `Across ${s.post.length} ${home.utility} bills`,
     },

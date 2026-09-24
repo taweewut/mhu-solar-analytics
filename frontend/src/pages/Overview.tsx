@@ -27,11 +27,16 @@ function PeriodControl({ period, onChange, mobile, live }: { period: Period; onC
   return (
     <div className="seg" role="radiogroup" aria-label="Period" style={mobile ? { display: "grid", gridTemplateColumns: "repeat(4, 1fr)" } : undefined}>
       {PERIOD_KEYS.map((k) => (
-        <label key={k} className="seg-opt" style={mobile ? { justifyContent: "flex-start" } : { padding: "8px 16px", gap: 8 }}>
+        <label
+          key={k}
+          className="seg-opt"
+          style={mobile ? { justifyContent: "flex-start", padding: "12px 12px" } : { padding: "6px 16px", flexDirection: "column", alignItems: "flex-start", gap: 0, lineHeight: 1.25 }}
+        >
           <input type="radio" name={name} checked={k === period} onChange={() => onChange(k)} />
           {/* Without 5-minute data "Today" is really the latest day in the daily report. */}
-          {k === "today" && !live ? "Latest day" : PERIODS[k].label}
-          {!mobile && <span style={{ fontSize: 11, opacity: 0.75 }}>{k === "today" && !live ? "ล่าสุด" : PERIODS[k].th}</span>}
+          <span>{k === "today" && !live ? "Latest day" : PERIODS[k].label}</span>
+          {/* Thai under the English at 11px on desktop; dropped on a phone (review 3h). */}
+          {!mobile && <span style={{ fontSize: 11, opacity: 0.8 }}>{k === "today" && !live ? "ล่าสุด" : PERIODS[k].th}</span>}
         </label>
       ))}
     </div>
@@ -114,23 +119,28 @@ export function Overview({ mobile, fiveMin, daily, model, caps }: Props) {
   );
 
   if (mobile) {
+    // The family's answer first (review): the headline, the period's solar and what it saved;
+    // then the diagram; then the rest of the cards.
+    const solarIdx = 0;
+    const savedIdx = kpis.findIndex((k, i) => i > 0 && /^Saved|saving/i.test(k.label) && !/lifetime/i.test(k.label));
+    const first = [kpis[solarIdx], ...(savedIdx > 0 ? [kpis[savedIdx]] : [])];
+    const rest = kpis.filter((_, i) => i !== solarIdx && i !== savedIdx);
     return (
       <>
-        <div style={{ padding: "16px 20px 0", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ padding: "20px 20px 0", display: "flex", flexDirection: "column", gap: 12 }}>
           <PageTitle mobile title="Energy flow" sub={`การไหลของพลังงาน · ${view.range}${view.estDays ? ` · incl. ${view.estDays} est. days` : ""}`} />
           <PeriodControl mobile live={caps.fiveMin} period={period} onChange={setPeriod} />
           {picker}
-          <div ref={ref} style={{ marginTop: 4 }}>
-            {view.empty ? <NoData height={290} period={period} pick={pick} /> : <Sankey flows={view.flows} width={width} height={290} variant="mobile" />}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "12px 0 4px", borderTop: "2px solid var(--color-divider)" }}>
-            <span style={{ fontWeight: 800, fontSize: 17, lineHeight: 1.25, textWrap: "pretty" } as React.CSSProperties}>{view.captionEn}</span>
-            <span className="muted-72" style={{ fontSize: 13 }}>
-              {view.captionTh}
-            </span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "4px 0 0" }}>
+            <span style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.25, textWrap: "pretty" } as React.CSSProperties}>{view.captionEn}</span>
+            <span className="th-sub">{view.captionTh}</span>
           </div>
         </div>
-        <KpiGrid mobile items={kpis} style={{ marginTop: 12 }} />
+        <KpiGrid mobile items={first} style={{ marginTop: 12 }} />
+        <div style={{ padding: "20px 20px 0" }}>
+          <div ref={ref}>{view.empty ? <NoData height={290} period={period} pick={pick} /> : <Sankey flows={view.flows} width={width} height={290} variant="mobile" />}</div>
+        </div>
+        {rest.length > 0 && <KpiGrid mobile items={rest} style={{ marginTop: 16 }} />}
       </>
     );
   }

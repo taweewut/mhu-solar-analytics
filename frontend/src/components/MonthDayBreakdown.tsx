@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { GroupedBarChart } from "@/components/GroupedBarChart";
 import { ChevronLeft, ChevronRight } from "@/components/Icons";
-import { EstLegend, EstTag, Legend, Section } from "@/components/ui2";
-import type { BarGroup, RightAxis } from "@/lib/charts";
+import { EstLegend, EstTag, Legend, LegendRow, Section } from "@/components/ui2";
+import type { BarGroup } from "@/lib/charts";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { dm, MONTH_ABBR, MONTH_FULL } from "@/lib/format";
 import { estimateNote, isEstimated, type EstimatedRow } from "@/lib/estimate";
@@ -85,9 +85,10 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
   const name = `${MONTH_FULL[m - 1]} ${y}`;
 
   const chart = useMemo(() => {
+    // A phone labels every 5th day; the bars still fit the screen.
     const groups: BarGroup[] = days.map((d) => ({
-      label: String(d.day),
-      sub: d.weekday.slice(0, 2),
+      label: !mobile || d.day % 5 === 1 ? String(d.day) : "",
+      sub: mobile ? "" : d.weekday.slice(0, 2),
       missingLabel: gapOn(home.dataGaps, d.date) ? "offline" : undefined,
       vals: d.data
         ? [
@@ -97,15 +98,11 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
           ]
         : null,
     }));
+    // Self-sufficiency strip, 0–100 % (values printed on desktop; fill only on a phone).
     const ss = days.map((d) => d.data?.ss ?? null);
-    const lows = ss.filter((v): v is number => v != null);
-    // Daily self-sufficiency swings more than monthly: 10-point ticks, never above 90 at the bottom.
-    const min = Math.min(90, ...lows.map((v) => Math.floor(v / 10) * 10));
-    const ticks: number[] = [];
-    for (let v = min; v <= 100; v += 10) ticks.push(v);
-    const right: RightAxis = { min, max: 100, ticks, vals: ss, fmt: (v) => `${v} %` };
-    return { groups, right };
-  }, [days, home.dataGaps]);
+    const strip = { label: mobile ? "Self" : "Self-suff.", vals: ss, fmt: (v: number) => (mobile ? "" : String(Math.round(v))), fill: (v: number) => v / 100 };
+    return { groups, strip };
+  }, [days, home.dataGaps, mobile]);
 
   const save = () => {
     const rows = days.map((d) => [d.date, ...cols.map((c) => (d.data ? c.csvCell(d.data) : "")), d.est ? "yes" : ""]);
@@ -117,7 +114,7 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
   const estRows = daily.filter((d) => d.date.startsWith(month) && isEstimated(d));
   const pvEstimated = estRows.some((d) => (d as EstimatedRow).estimatedParts === "pv+meter");
   if (!month) return null;
-  const chartW = mobile ? Math.max(width, days.length * 26 + 110) : width;
+  const chartW = width;
   const portal = home.inverter.brand === "Solis" ? "SolisCloud" : home.inverter.brand === "Huawei" ? "FusionSolar" : home.inverter.brand;
 
   return (
@@ -161,19 +158,23 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
           .join("")
       }
     >
-      <div style={{ display: "flex", gap: "8px 16px", flexWrap: "wrap" }}>
+      <LegendRow>
         <Legend color={COLORS.pv}>Solar PV</Legend>
         <Legend color={COLORS.load}>Home load</Legend>
         <Legend color={COLORS.grid}>Grid import</Legend>
-        <Legend color="var(--color-text)" line>
-          Self-sufficiency % (right)
-        </Legend>
         {estCount > 0 && <EstLegend />}
+        <span className="muted-72" style={{ fontSize: 11 }}>
+          Self-sufficiency: strip under the bars, 0–100 %
+        </span>
+      </LegendRow>
+      <div ref={ref}>
+        <GroupedBarChart label={`Solar, load and grid per day, ${name}`} width={chartW} height={mobile ? 220 : 280} groups={chart.groups} fmt={(v) => v.toFixed(0)} strip={chart.strip} inset={mobile ? 1 : 3} />
       </div>
-      <div ref={ref} className={mobile ? "hscroll" : undefined}>
-        <GroupedBarChart label={`Solar, load and grid per day, ${name}`} width={chartW} height={300} groups={chart.groups} fmt={(v) => v.toFixed(0)} right={chart.right} inset={3} />
-      </div>
+      {mobile && (
+        <MobileDays days={days} total={total} month={m} estCount={estCount} withFive={withFive} daily={daily} />
+      )}
 
+      {!mobile && (
       <div className="hscroll">
         <div style={{ display: "flex", flexDirection: "column", fontSize: 14, minWidth: 110 + cols.length * 85 }}>
           <div className="table-head" style={{ display: "grid", gridTemplateColumns: grid, gap: 8, padding: "8px 0" }}>
@@ -219,6 +220,46 @@ export function MonthDayBreakdown({ daily, fiveMinDates, mobile, style }: { dail
           </div>
         </div>
       </div>
+      )}
     </Section>
+  );
+}
+
+/**
+ * Mobile day rows (review 3b §5): line 1 = date, est. tag and the day's solar; line 2 = load,
+ * grid import and self-sufficiency. Days with 5-minute data link to the Day view.
+ */
+function MobileDays({ days, total, month, estCount, withFive, daily }: { days: DayRow[]; total: ReturnType<typeof monthTotal>; month: number; estCount: number; withFive: Set<string>; daily: DailyRow[] }) {
+  const { home } = useHome();
+  return (
+    <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--color-text)" }}>
+      {[...days].reverse().map((d) => {
+        const label = `${d.weekday} ${dm(d.date)}`;
+        return (
+          <div key={d.date} className={`mrow${d.data ? "" : " hatch"}`}>
+            <div className="mrow-line">
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{withFive.has(d.date) ? <a href={href("day", { d: d.date })}>{label}</a> : label}</span>
+              {d.est && <EstTag style={{ marginLeft: 0 }} title={`Estimated: ${estimateNote(daily.find((x) => x.date === d.date)!, home.utility)}`} />}
+              <span className="mrow-num">{d.data?.pv != null ? `${d.data.pv.toFixed(1)} kWh` : "—"}</span>
+            </div>
+            <span className="caption">
+              {d.data
+                ? `Load ${d.data.load?.toFixed(1) ?? "—"} · grid ${d.data.grid?.toFixed(2) ?? "—"} kWh · self-suff. ${pct(d.data.ss)}`
+                : (gapOn(home.dataGaps, d.date)?.reason.toLowerCase() ?? "no data")}
+            </span>
+          </div>
+        );
+      })}
+      <div className="mrow" style={{ borderBottom: "2px solid var(--color-divider)" }}>
+        <div className="mrow-line">
+          <span style={{ fontSize: 14, fontWeight: 800 }}>
+            {MONTH_ABBR[month - 1]} · {total.days} days
+          </span>
+          {estCount > 0 && <EstTag style={{ marginLeft: 0 }} title={`${estCount} estimated days`} />}
+          <span className="mrow-num">{total.pv != null ? `${total.pv.toFixed(1)} kWh` : "—"}</span>
+        </div>
+        <span className="caption">{`Load ${total.load?.toFixed(1) ?? "—"} · grid ${total.grid?.toFixed(2) ?? "—"} kWh · self-suff. ${pct(total.ss)}`}</span>
+      </div>
+    </div>
   );
 }
