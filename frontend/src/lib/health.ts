@@ -1,7 +1,7 @@
 // Health (2c): working state, alarms, peak PV, temperature, data completeness, MPPT balance,
 // and the battery BMS log (temperature, cell voltages).
 
-import { integrateKwh, readingsFor } from "@/lib/energy";
+import { integrateKwh, readingsFor, type Reading } from "@/lib/energy";
 import { hm, minuteOfDay } from "@/lib/format";
 import { READINGS_PER_DAY } from "@/lib/system";
 import type { BmsRow, FiveMinRow } from "@/lib/types";
@@ -110,6 +110,8 @@ export interface BmsDay {
   spreadMv: number | null;
   /** Largest cell spread that day, mV. */
   maxSpreadMv: number | null;
+  /** The newest sample with its readings. */
+  latest: BmsRow;
 }
 
 /**
@@ -136,9 +138,26 @@ export function bmsDay(rows: BmsRow[], date: string): BmsDay | null {
     hottest,
     spreadMv: spreads.at(-1) ?? null,
     maxSpreadMv: spreads.length ? Math.max(...spreads) : null,
+    latest: day[day.length - 1],
   };
 }
 
 /** "23/09/2026"-style first logged date, for "logged since …" notes. */
 export const bmsSince = (rows: BmsRow[]): string | null =>
   rows.length ? rows.reduce((a, r) => (r.time < a ? r.time : a), rows[0].time).slice(0, 10) : null;
+
+/** A series needs this many samples in its window (6 h at 15 min) before it's drawn as a chart;
+ *  below that it's a value block (review 3b §5 "sparse series"). */
+export const SPARSE_MIN = 24;
+
+/**
+ * String balance (review 3f): MPPT2 ÷ MPPT1 in % for readings with PV above 400 W (at low
+ * light the ratio is noise); null elsewhere, which breaks the line.
+ */
+export function stringRatio(P: Reading[]): [number, number | null][] {
+  return P.map((p) => [p.t, p.mppt1 + p.mppt2 > 400 && p.mppt1 > 0 ? (p.mppt2 / p.mppt1) * 100 : null]);
+}
+
+/** Completeness cell shade (review: ink ramp, not battery green): 100 % → 28 %, ≥ 95 % → 16 %, else 8 %. */
+export const completenessShade = (pct: number): string =>
+  `color-mix(in srgb, var(--color-text) ${pct >= 100 ? 28 : pct >= 95 ? 16 : 8}%, transparent)`;

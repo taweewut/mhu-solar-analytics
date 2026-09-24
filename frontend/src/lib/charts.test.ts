@@ -68,3 +68,22 @@ describe("groupBars missing label", () => {
     expect(g.xlabels.map((x) => x.sub)).toEqual(["split ≠ units", "not loaded"]);
   });
 });
+
+describe("groupBars: data states and label density (design review)", () => {
+  const g = (n: number, extra: Partial<import("@/lib/charts").BarGroup> = {}) =>
+    Array.from({ length: n }, (_, i) => ({ label: `M${i}`, top: "x", vals: [{ v: 10, color: "a" }, { v: 0, color: "b" }], ...extra }));
+
+  it("labels above bars only up to 7 groups; a partial group's label is dimmed", () => {
+    expect(groupBars({ width: 800, height: 300, groups: g(7, { partial: true }), fmt: String }).tops).toHaveLength(7);
+    expect(groupBars({ width: 800, height: 300, groups: g(7, { partial: true }), fmt: String }).tops[0].dim).toBe(true);
+    expect(groupBars({ width: 800, height: 300, groups: g(12), fmt: String }).tops).toHaveLength(0);
+  });
+
+  it("a 0 value is a stub marker, not a bar; null stays absent; every group has a slot", () => {
+    const geo = groupBars({ width: 800, height: 300, groups: [...g(2), { label: "gap", vals: null }], fmt: String });
+    expect(geo.zeros).toHaveLength(2);
+    expect(geo.rects).toHaveLength(2);
+    expect(geo.slots).toHaveLength(3);
+    expect(geo.missing).toHaveLength(1);
+  });
+});

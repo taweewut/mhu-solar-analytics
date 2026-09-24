@@ -1,13 +1,19 @@
 // Pieces shared by the v2 pages (Trends / Battery / Health).
 
+import { TriangleAlert } from "@/components/Icons";
 import { SectionTitle } from "@/components/ui";
 
-/** A 2px-ruled section with a title row (title left, legend / extras right). */
+/**
+ * A 2px-ruled section with the chart header (review 3b §2): title block left, legend right
+ * (wraps under the title on narrow screens). `rule={false}` for a section that directly follows
+ * a KPI row, which already ends in a 2px rule (review: no double rules).
+ */
 export function Section({
   en,
   th,
   extra,
   note,
+  rule = true,
   style,
   children,
 }: {
@@ -15,66 +21,99 @@ export function Section({
   th: string;
   extra?: React.ReactNode;
   note?: React.ReactNode;
+  rule?: boolean;
   style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   return (
-    <section style={{ borderTop: "2px solid var(--color-divider)", paddingTop: 20, display: "flex", flexDirection: "column", gap: 12, minWidth: 0, ...style }}>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: "8px 16px", flexWrap: "wrap" }}>
+    <section style={{ borderTop: rule ? "2px solid var(--color-divider)" : undefined, paddingTop: rule ? 18 : 0, display: "flex", flexDirection: "column", gap: 12, minWidth: 0, ...style }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "8px 24px", flexWrap: "wrap" }}>
         <div style={{ marginRight: "auto" }}>
           <SectionTitle en={en} th={th} />
         </div>
-        {extra}
+        {extra && <div className="sec-legend">{extra}</div>}
       </div>
       {children}
-      {note && (
-        <span className="muted" style={{ fontSize: 11 }}>
-          {note}
-        </span>
-      )}
+      {note && <span className="caption">{note}</span>}
     </section>
   );
 }
 
-/** Legend swatch for estimated bars (lighter fill, dashed outline). */
-export function EstLegend({ children = "Estimated" }: { children?: React.ReactNode }) {
+/** A legend row (series at 12px) inside a chart header. */
+export const LegendRow = ({ children }: { children: React.ReactNode }) => (
+  <div className="legend-row">{children}</div>
+);
+
+/** The data states actually present in a chart (review 3b §1), as an 11px legend row. */
+export function StateRow({ est, noData, zero, after, last }: { est?: string | boolean; noData?: boolean; zero?: boolean; after?: boolean; last?: string | null }) {
+  const item = (swatch: React.ReactNode, label: string) => (
+    <span key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+      {swatch}
+      {label}
+    </span>
+  );
+  const items = [
+    est && item(<span style={{ width: 16, height: 10, boxSizing: "border-box", border: "1.5px dashed var(--color-text)" }} />, typeof est === "string" ? est : "Estimated"),
+    noData && item(<span className="hatch" style={{ width: 16, height: 10 }} />, "No data"),
+    zero && item(<span style={{ width: 16, borderTop: "1px dotted color-mix(in srgb, var(--color-text) 50%, transparent)" }} />, "0 kWh"),
+    after && item(<span style={{ width: 16, height: 10, boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-text) 20%, transparent)" }} />, "After last reading"),
+    last && item(<span style={{ width: 2, height: 12, background: "var(--color-accent)" }} />, `Last reading ${last}`),
+  ].filter(Boolean);
+  if (!items.length) return null;
+  return (
+    <div className="legend-row muted-72" style={{ fontSize: 11 }}>
+      {items}
+    </div>
+  );
+}
+
+/**
+ * Legend swatch for estimates (review 3b §1): dashed 1.5px outline with a 35 % fill in the series
+ * colour; a counterfactual ("without solar") is outline only.
+ */
+export function EstLegend({ children = "Estimated", color = "var(--color-text)", outline }: { children?: React.ReactNode; color?: string; outline?: boolean }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-      <span style={{ width: 14, height: 10, background: "color-mix(in srgb, var(--color-text) 15%, transparent)", border: "1.5px dashed var(--color-text)" }} />
+      <span style={{ width: 10, height: 10, boxSizing: "border-box", border: `1.5px dashed ${color}`, background: outline ? undefined : `color-mix(in srgb, ${color} 35%, transparent)` }} />
       {children}
     </span>
   );
 }
 
-/** Small "est." marker for estimated figures. */
-export const EstTag = ({ title }: { title?: string }) => (
-  <span className="tag tag-neutral" title={title} style={{ marginLeft: 6, padding: "1px 6px", fontSize: 10, border: "1px dashed var(--color-divider)" }}>
+/** "est." tag: 10px 600 with a 1px dashed ink border. */
+export const EstTag = ({ title, style }: { title?: string; style?: React.CSSProperties }) => (
+  <span className="tag-est" title={title} style={{ marginLeft: 6, ...style }}>
     est.
   </span>
 );
 
-export function Legend({ color, line, dashed, children }: { color: string; line?: boolean; dashed?: boolean; children: React.ReactNode }) {
+/** Warning tag: ink outline + triangle-alert (never accent red, which is for active / NOW). */
+export const WarnTag = ({ children, title }: { children: React.ReactNode; title?: string }) => (
+  <span className="tag-warn" title={title}>
+    <TriangleAlert size={9} />
+    {children}
+  </span>
+);
+
+/** Series legend item: 10×10 swatch for bars/areas, 16×2 for lines (colour or weight, never dash). */
+export function Legend({ color, line, weight = 2, children }: { color: string; line?: boolean; weight?: number; children: React.ReactNode }) {
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-      {line ? (
-        <span style={{ width: 14, height: 0, borderTop: `2px ${dashed ? "dashed" : "solid"} ${color}` }} />
-      ) : (
-        <span style={{ width: 14, height: 10, background: color }} />
-      )}
+      {line ? <span style={{ width: 16, height: weight, background: color }} /> : <span style={{ width: 10, height: 10, background: color }} />}
       {children}
     </span>
   );
 }
 
-/** Segmented control with EN label + small TH label (desktop 1c style). */
-export function Seg<T extends string>({ name, value, options, onChange }: { name: string; value: T; options: [T, string, string][]; onChange: (v: T) => void }) {
+/** Segmented control: English with the Thai under it at 11px (review 3h); Thai dropped on mobile. */
+export function Seg<T extends string>({ name, value, options, onChange, mobile }: { name: string; value: T; options: [T, string, string][]; onChange: (v: T) => void; mobile?: boolean }) {
   return (
     <div className="seg" role="radiogroup">
       {options.map(([k, en, th]) => (
-        <label key={k} className="seg-opt" style={{ padding: "8px 16px", gap: 8 }}>
+        <label key={k} className="seg-opt" style={{ padding: mobile ? "10px 14px" : "6px 16px", flexDirection: "column", alignItems: "flex-start", gap: 0, lineHeight: 1.25 }}>
           <input type="radio" name={name} checked={k === value} onChange={() => onChange(k)} />
-          {en}
-          <span style={{ fontSize: 11, opacity: 0.75 }}>{th}</span>
+          <span>{en}</span>
+          {!mobile && <span style={{ fontSize: 11, opacity: 0.8 }}>{th}</span>}
         </label>
       ))}
     </div>

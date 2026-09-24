@@ -167,7 +167,7 @@ describe("node explanations", () => {
 describe("dashed-line legend", () => {
   it("names the 0 kWh paths and why Grid → Battery is always 0", () => {
     const text = zeroLegend(layoutSankey(TODAY, { width: 1184, height: 400 }))!;
-    expect(text).toBe("Dashed line = 0 kWh: Grid → Battery (the inverter doesn't report grid charging separately, so it's shown as 0).");
+    expect(text).toBe("Dotted line = 0 kWh: Grid → Battery (the inverter doesn't report grid charging separately, so it's shown as 0).");
   });
 
   it("lists every zero path, and is null when nothing is dashed", () => {

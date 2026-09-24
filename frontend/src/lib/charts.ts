@@ -27,6 +27,8 @@ export interface BarGroup {
   vals: BarValue[] | null;
   /** Why a hatched group has no bars (default "not loaded"). */
   missingLabel?: string;
+  /** A partial period (e.g. a 3-day month): its label is drawn at 60 % (review "partial period"). */
+  partial?: boolean;
 }
 
 export interface RightAxis {
@@ -51,6 +53,9 @@ export interface GroupBarsInput {
   inset?: number;
 }
 
+/** Most groups that still get a label above their bars (review: labels drift with more). */
+export const MAX_LABELLED_GROUPS = 7;
+
 export interface Pos {
   x: number;
   y: number;
@@ -67,8 +72,12 @@ export interface GroupBarsGeometry {
   missing: { x: number; y: number; w: number; h: number }[];
   yTicks: (Pos & { label: string })[];
   rTicks: (Pos & { label: string })[];
-  tops: (Pos & { label: string })[];
-  xlabels: (Pos & { label: string; sub: string })[];
+  tops: (Pos & { label: string; dim?: boolean })[];
+  xlabels: (Pos & { label: string; sub: string; dim?: boolean })[];
+  /** Each group's bar slot (x, width): for value strips drawn under the axis. */
+  slots: { x: number; w: number }[];
+  /** 0 values: a 2px stub in the series colour with a printed "0" (review data state "zero"). */
+  zeros: (Pos & { color: string })[];
   line: string;
   dots: Pos[];
 }
@@ -94,15 +103,24 @@ export function groupBars({ width: W, height: H, groups, fmt, ticks = 4, right, 
   const missing: GroupBarsGeometry["missing"] = [];
   const tops: GroupBarsGeometry["tops"] = [];
   const xlabels: GroupBarsGeometry["xlabels"] = [];
+  const slots: GroupBarsGeometry["slots"] = [];
+  const zeros: GroupBarsGeometry["zeros"] = [];
+  const labelled = groups.length <= MAX_LABELLED_GROUPS;
   groups.forEach((g, i) => {
     const x0 = pl + gw * i + inset;
+    slots.push({ x: x0, w: slot });
     if (g.vals) {
-      g.vals.forEach((v, j) => v.v != null && rects.push({ x: x0 + j * (bw + 3), y: Y(v.v), w: bw, h: Y(0) - Y(v.v), color: v.color, est: v.est }));
-      if (g.top) tops.push({ label: g.top, x: x0, y: Y(Math.max(0, ...g.vals.map((v) => v.v ?? 0))) - 10 });
+      g.vals.forEach((v, j) => {
+        const x = x0 + j * (bw + 3);
+        if (v.v == null) return;
+        if (v.v === 0) zeros.push({ x: x + bw / 2, y: Y(0), color: v.color });
+        else rects.push({ x, y: Y(v.v), w: bw, h: Y(0) - Y(v.v), color: v.color, est: v.est });
+      });
+      if (g.top && labelled) tops.push({ label: g.top, x: x0, y: Y(Math.max(0, ...g.vals.map((v) => v.v ?? 0))) - 10, dim: g.partial });
     } else {
       missing.push({ x: x0, y: pt, w: slot, h: ih });
     }
-    xlabels.push({ label: g.label, sub: g.vals ? (g.sub ?? "") : (g.missingLabel ?? "not loaded"), x: x0, y: H - 34 });
+    xlabels.push({ label: g.label, sub: g.vals ? (g.sub ?? "") : (g.missingLabel ?? "not loaded"), x: x0, y: H - 34, dim: g.partial });
   });
 
   const yTicks: GroupBarsGeometry["yTicks"] = [];
@@ -127,7 +145,7 @@ export function groupBars({ width: W, height: H, groups, fmt, ticks = 4, right, 
     });
     right.ticks.forEach((v) => rTicks.push({ x: W - pr + 8, y: R(v), label: right.fmt(v) }));
   }
-  return { W, H, pl, pt, xr: W - pr, yb: Y(0), rects, missing, yTicks, rTicks, tops, xlabels, line, dots };
+  return { W, H, pl, pt, xr: W - pr, yb: Y(0), rects, missing, yTicks, rTicks, tops, xlabels, line, dots, slots, zeros };
 }
 
 export interface LineSeries {
@@ -148,8 +166,12 @@ export interface LineChartInput {
   ymax: number;
   step: number;
   fmt: (v: number) => string;
-  /** Minute of the latest reading when the day is still in progress: shades the rest of the day. */
+  /** Minute of the latest reading when the day is still in progress: the last-reading marker. */
   nowT?: number | null;
+  /** Shaded value bands, e.g. the ±5 % "normal" band of a ratio (ink 8 %). */
+  bands?: { lo: number; hi: number }[];
+  /** Reference lines, e.g. 100 % (solid, ink 30 %) or a 60 °C limit (dotted). */
+  refs?: { v: number; dotted?: boolean }[];
 }
 
 export interface LineChartGeometry {
@@ -161,6 +183,8 @@ export interface LineChartGeometry {
   xr: number;
   yb: number;
   paths: { d: string; color: string; w: number; dash?: string }[];
+  bandRects: { y: number; h: number }[];
+  refLines: { y: number; dotted?: boolean }[];
   /** Point markers of `dots` series. */
   marks: { x: number; y: number; color: string }[];
   yTicks: (Pos & { label: string })[];
@@ -168,7 +192,7 @@ export interface LineChartGeometry {
   nowX: number | null;
 }
 
-export function lineChart({ width: W, height: H, series, ymin, ymax, step, fmt, nowT }: LineChartInput): LineChartGeometry {
+export function lineChart({ width: W, height: H, series, ymin, ymax, step, fmt, nowT, bands = [], refs = [] }: LineChartInput): LineChartGeometry {
   const pl = 56;
   const pr = 12;
   const pt = 12;
@@ -198,7 +222,10 @@ export function lineChart({ width: W, height: H, series, ymin, ymax, step, fmt, 
   // Every 3 h; every 6 h when the plot is too narrow for nine labels (mobile).
   const hours = iw < 400 ? [0, 6, 12, 18, 24] : [0, 3, 6, 9, 12, 15, 18, 21, 24];
   const xTicks = hours.map((h) => ({ x: X(h * 60), y: H - 10, label: `${String(h).padStart(2, "0")}:00` }));
-  return { W, H, pl, pt, ih, xr: W - pr, yb: pt + ih, paths, marks, yTicks, xTicks, nowX: nowT != null ? X(nowT) : null };
+  const clampY = (v: number) => Y(Math.max(ymin, Math.min(ymax, v)));
+  const bandRects = bands.map((b) => ({ y: clampY(b.hi), h: clampY(b.lo) - clampY(b.hi) }));
+  const refLines = refs.filter((r) => r.v >= ymin && r.v <= ymax).map((r) => ({ y: Y(r.v), dotted: r.dotted }));
+  return { W, H, pl, pt, ih, xr: W - pr, yb: pt + ih, paths, marks, bandRects, refLines, yTicks, xTicks, nowX: nowT != null ? X(nowT) : null };
 }
 
 /** Axis bounds that cover `vals` in whole `step`s, never narrower than [lo, hi]. */

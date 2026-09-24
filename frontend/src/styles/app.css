@@ -4,8 +4,16 @@
 :root {
   --font-body: "Archivo", "IBM Plex Sans Thai", system-ui, sans-serif;
   --font-heading: "Archivo", "IBM Plex Sans Thai", system-ui, sans-serif;
-  --muted: color-mix(in srgb, var(--color-text) 68%, transparent);
+  /* Muted text is ink at 72 % everywhere (design review 3h: Thai sub-labels, captions, ticks). */
+  --muted: color-mix(in srgb, var(--color-text) 72%, transparent);
   --muted-72: color-mix(in srgb, var(--color-text) 72%, transparent);
+  /* Data states (review 3b §1) and the sun / moon strip (3b §2). */
+  --hatch: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--color-text) 14%, transparent) 4px 6px);
+  --sun: color-mix(in srgb, #e9a825 42%, transparent);
+  --night: color-mix(in srgb, #201e1d 9%, transparent);
+  /* Heatmap ramps start from this, never from the ground (review: dark SOC ramp). */
+  --ramp-base: var(--color-bg);
+  --heat-ink-low: #201e1d;
   color-scheme: light;
 }
 
@@ -20,6 +28,12 @@
     --color-accent: #ff563c;
     --color-neutral-100: #2d2b2b;
     --color-neutral-800: #d7d3d3;
+    --hatch: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--color-text) 22%, transparent) 4px 6px);
+    --sun: color-mix(in srgb, #e9a825 58%, transparent);
+    --night: color-mix(in srgb, #f1efee 13%, transparent);
+    --ramp-base: #2d2b2b;
+  --heat-ink-low: #f1efee;
+    --heat-ink-low: #f1efee;
     color-scheme: dark;
   }
 }
@@ -31,6 +45,11 @@
   --color-accent: #ff563c;
   --color-neutral-100: #2d2b2b;
   --color-neutral-800: #d7d3d3;
+  --hatch: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--color-text) 22%, transparent) 4px 6px);
+  --sun: color-mix(in srgb, #e9a825 58%, transparent);
+  --night: color-mix(in srgb, #f1efee 13%, transparent);
+  --ramp-base: #2d2b2b;
+  --heat-ink-low: #f1efee;
   color-scheme: dark;
 }
 
@@ -112,10 +131,8 @@ button { font-family: inherit; }
 
 .state { padding: 48px 20px; font-size: 14px; }
 
-/* "Not loaded yet" — days / months with no data are hatched, never drawn as zero (v2). */
-.hatch {
-  background: repeating-linear-gradient(45deg, transparent 0 4px, color-mix(in srgb, var(--color-text) 12%, transparent) 4px 6px);
-}
+/* "No data" — data should exist but didn't arrive. Hatch means only this (review 3b §1). */
+.hatch { background: var(--hatch); }
 
 /* Two equal chart columns (Trends / Health pair rows); stacked on narrow screens. */
 .pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 32px; }
@@ -123,15 +140,96 @@ button { font-family: inherit; }
   .pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-.heatmap { display: grid; grid-template-columns: 96px repeat(24, minmax(0, 1fr)); gap: 2px; }
-.heat-cell { height: 26px; display: flex; align-items: center; padding-left: 4px; overflow: hidden; }
+/* Heatmaps (review 3h): 1px gap grid, label column 96 / 44 px, cells 24 / 14 px tall,
+   numerals every 3 h at 10px 600 tabular on desktop only. */
+.heatmap { display: grid; grid-template-columns: 96px minmax(0, 1fr); row-gap: 1px; }
+.heat-row { position: relative; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 1px; }
+.heat-label { font-size: 12px; align-self: center; white-space: nowrap; }
+.heat-cell {
+  height: 24px; display: flex; align-items: center; padding-left: 4px; overflow: hidden; box-sizing: border-box;
+  font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; color: #201e1d;
+}
+.heat-cell.low { color: var(--heat-ink-low); }
+.heat-after { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-text) 16%, transparent); }
+.heat-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--color-accent); pointer-events: none; }
+.heat-axis { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 1px; font-size: 10px; color: var(--muted-72); padding-bottom: 4px; }
 @media (max-width: 959px) {
-  .heatmap { grid-template-columns: 52px repeat(24, minmax(0, 1fr)); gap: 1px; }
-  .heat-cell { height: 18px; padding-left: 0; }
+  .heatmap { grid-template-columns: 44px minmax(0, 1fr); }
+  .heat-label { font-size: 11px; }
+  .heat-cell { height: 14px; padding-left: 0; }
   .heat-cell span { display: none; }
 }
 
 .table-head {
   font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--muted); border-bottom: 2px solid var(--color-divider);
+}
+
+/* ── Design review (23/09/2026) additions ─────────────────────────────────────────────── */
+
+/* In-page links: ink with a 1px underline, accent only on hover (red is for active / NOW). */
+main a:not(.tab) { color: var(--color-text); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+main a:not(.tab):hover { color: var(--color-accent); }
+
+/* Chart / section header (3b §2): title 22/28 800, mobile 20/26; sub 12/16 ink 72 %. */
+.sec-title { font-size: 22px; line-height: 28px; font-weight: 800; }
+.sec-sub { font-size: 12px; line-height: 16px; color: var(--muted-72); }
+.caption { font-size: 12px; line-height: 18px; color: var(--muted-72); }
+.th-sub { font-size: 12px; line-height: 16px; color: var(--muted-72); }
+@media (max-width: 599px) { .sec-title { font-size: 20px; line-height: 26px; } }
+
+/* Tags: est. = dashed ink outline; warning = solid ink outline + triangle; partial = ink 10 %. */
+.tag-est { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; padding: 0 5px; border: 1px dashed var(--color-text); white-space: nowrap; line-height: 16px; }
+.tag-warn { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; padding: 0 5px; border: 1px solid var(--color-text); white-space: nowrap; line-height: 16px; }
+.tag-partial { display: inline-flex; font-size: 10px; padding: 0 4px; background: color-mix(in srgb, var(--color-text) 10%, transparent); white-space: nowrap; }
+.tag-state { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 1px 6px; background: color-mix(in srgb, var(--color-text) 10%, transparent); white-space: nowrap; }
+
+/* Info tooltip (3b §4): 14px icon at 55 % ink, 44×44 hit area, popover on surface. */
+.info-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 44px; height: 44px; margin: -15px -15px -15px -9px; padding: 0;
+  background: none; border: 0; color: var(--color-text); cursor: pointer;
+}
+.info-btn svg { opacity: 0.55; }
+.info-btn:hover svg, .info-btn[aria-expanded="true"] svg { opacity: 1; }
+.info-btn:focus-visible { outline: none; }
+.info-btn:focus-visible svg { outline: 2px solid var(--color-accent); opacity: 1; }
+.popover {
+  position: absolute; z-index: 20; width: min(280px, 86vw);
+  background: var(--color-surface); color: var(--color-text);
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent); box-shadow: var(--shadow-md);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 18px;
+  white-space: normal; text-align: left; font-weight: 400;
+}
+.popover .src { font-size: 12px; color: var(--muted-72); }
+
+/* Status chip (3b §3): ink only; weight grows with severity. 28px desktop, 44px mobile. */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; box-sizing: border-box;
+  font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; position: relative;
+  background: transparent; color: var(--color-text); border: 1px solid color-mix(in srgb, var(--color-text) 22%, transparent);
+}
+.chip-stale { border: 1.5px solid var(--color-text); font-weight: 600; }
+.chip-offline { background: var(--color-text); color: var(--color-bg); border-color: var(--color-text); font-weight: 600; }
+.app-mobile .chip { height: 44px; font-size: 13px; }
+.app-mobile .btn-icon { width: 44px; height: 44px; }
+
+/* Mobile list rows replacing wide tables (3b §5). */
+.mrow { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; min-height: 48px; box-sizing: border-box; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent); }
+.mrow-line { display: flex; align-items: baseline; gap: 8px; }
+.mrow-num { margin-left: auto; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Collapsible "More detail" / older years. */
+details.more > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; min-height: 48px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent); font-size: 14px; font-weight: 600; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary .meta { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--muted-72); }
+details.more > summary svg { transition: transform .15s; }
+details.more[open] > summary svg { transform: rotate(180deg); }
+
+/* Chart-header legend: right-aligned beside the title; under it, left-aligned, below 600px. */
+.sec-legend { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.legend-row { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px 14px; }
+@media (max-width: 599px) {
+  .sec-legend { align-items: flex-start; width: 100%; }
+  .legend-row { justify-content: flex-start; }
 }

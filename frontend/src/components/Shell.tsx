@@ -1,4 +1,6 @@
-import { Activity, BarChart3, BatteryMedium, Clock, LayoutDashboard, Moon, Settings, Sun, Wallet } from "@/components/Icons";
+import { useEffect, useRef, useState } from "react";
+import { Activity, BarChart3, BatteryMedium, Clock, LayoutDashboard, Moon, Pause, Settings, Sun, TriangleAlert, Wallet } from "@/components/Icons";
+import type { FeedState } from "@/lib/status";
 import { routeAvailable, useHome, type Caps } from "@/lib/home";
 import { href, navigate, type Route } from "@/lib/router";
 import { useSettings } from "@/lib/settings";
@@ -44,10 +46,55 @@ function HomeSwitch({ size, route }: { size: number; route: Route }) {
   );
 }
 
-/** Green: data is flowing. Amber: the scheduled fetch is paused (daily API budget). */
-const LiveDot = ({ paused }: { paused?: boolean }) => (
-  <span style={{ width: 6, height: 6, background: paused ? "#e0a100" : "#3fa66a", flex: "none" }} />
-);
+/**
+ * Status chip (review 3b §3): the live feed in four states, carried by icon and words, ink only.
+ * Desktop shows the full line; mobile shows icon + time in a 44px chip. Tap / click opens the
+ * details (source · last reading · last / next fetch).
+ */
+function StatusChip({ feed, mobile }: { feed: FeedState; mobile?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", close);
+    document.addEventListener("pointerdown", close);
+    return () => {
+      document.removeEventListener("keydown", close);
+      document.removeEventListener("pointerdown", close);
+    };
+  }, [open]);
+  const icon =
+    feed.kind === "live" ? (
+      <span style={{ width: 6, height: 6, background: "currentColor", flex: "none" }} />
+    ) : feed.kind === "paused" ? (
+      <Pause size={12} />
+    ) : feed.kind === "stale" ? (
+      <Clock size={12} />
+    ) : (
+      <TriangleAlert size={12} />
+    );
+  return (
+    <span ref={ref} style={{ position: "relative", display: "inline-flex" }}>
+      <button type="button" className={`chip chip-${feed.kind}`} aria-expanded={open} aria-label={`Data status: ${feed.line}`} onClick={() => setOpen((o) => !o)}>
+        {icon}
+        {mobile ? feed.short : feed.line}
+      </button>
+      {open && (
+        <span role="dialog" className="popover" style={{ top: "calc(100% + 6px)", right: 0 }}>
+          <span style={{ fontWeight: 700 }}>{feed.line}</span>
+          {feed.detail.map((l) => (
+            <span key={l} className="src">
+              {l}
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function ThemeButton() {
   const { theme, toggle } = useTheme();
@@ -68,7 +115,7 @@ function SettingsButton() {
 }
 
 /** Desktop nav (1c/1d/1e). */
-export function TopNav({ route, status, caps, paused }: { route: Route; status: string; caps: Caps; paused?: string }) {
+export function TopNav({ route, feed, caps }: { route: Route; feed: FeedState | null; caps: Caps }) {
   const { home } = useHome();
   return (
     <nav className="nav" style={{ padding: "16px 48px", gap: 28 }}>
@@ -83,10 +130,7 @@ export function TopNav({ route, status, caps, paused }: { route: Route; status: 
           {n.label}
         </a>
       ))}
-      <span className="tag tag-neutral" style={{ gap: 6, whiteSpace: "nowrap" }} title={paused}>
-        <LiveDot paused={!!paused} />
-        {status}
-      </span>
+      {feed && <StatusChip feed={feed} />}
       <span className="nav-tools" style={{ marginLeft: -12 }}>
         <SettingsButton />
         <ThemeButton />
@@ -96,22 +140,19 @@ export function TopNav({ route, status, caps, paused }: { route: Route; status: 
 }
 
 /** Mobile header (1a/1b). */
-export function MobileHeader({ time, route, paused }: { time: string; route: Route; paused?: string }) {
+export function MobileHeader({ feed, route }: { feed: FeedState | null; route: Route }) {
   const { home } = useHome();
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px 14px", borderBottom: "2px solid var(--color-divider)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 10px 20px", borderBottom: "2px solid var(--color-divider)" }}>
       <div style={{ display: "flex", flexDirection: "column", marginRight: "auto", minWidth: 0 }}>
-        <span style={{ fontWeight: 800, fontSize: 19, lineHeight: 1.1 }}>
-          <HomeSwitch size={19} route={route} />
+        <span style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.2 }}>
+          <HomeSwitch size={18} route={route} />
         </span>
-        <span className="muted" style={{ fontSize: 11 }}>
+        <span className="muted" style={{ fontSize: 12 }}>
           {home.subtitleShort}
         </span>
       </div>
-      <span className="tag tag-neutral" style={{ gap: 6 }} title={paused}>
-        <LiveDot paused={!!paused} />
-        {time}
-      </span>
+      {feed && <StatusChip feed={feed} mobile />}
       <SettingsButton />
       <ThemeButton />
     </div>

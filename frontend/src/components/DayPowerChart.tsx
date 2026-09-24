@@ -64,24 +64,16 @@ export function DayPowerChart({ P, date, width, height, live, daylight }: Props)
           {g.xTicks.map((t) => (
             <line key={t.label} x1={t.x} x2={t.x} y1={g.pt} y2={g.yb} stroke="var(--color-text)" strokeOpacity={0.08} />
           ))}
-          {showNow && (
-            <>
-              <rect x={g.nowX} y={g.pt} width={g.xr - g.nowX} height={g.ih} fill="var(--color-surface)" />
-              {g.xr - g.nowX > 260 && (
-                <text x={g.nowX + 16} y={g.pt + 22} style={{ fontSize: 12, fill: "var(--color-text)", opacity: 0.65 }}>
-                  Rest of day · data arrives every 5 min
-                </text>
-              )}
-            </>
-          )}
           <path d={g.pvArea} fill={COLORS.pv} fillOpacity={0.55} />
           <path d={g.pvLine} fill="none" stroke={COLORS.pv} strokeWidth={1.5} />
           <path d={g.batArea} fill={COLORS.bat} fillOpacity={0.45} />
           <path d={g.gridArea} fill={COLORS.grid} fillOpacity={0.8} />
           <path d={g.loadLine} fill="none" stroke={COLORS.load} strokeWidth={2} />
-          <path d={g.socLine} fill="none" stroke="var(--color-text)" strokeWidth={1.5} strokeDasharray="5 4" />
+          {/* SOC is told apart by colour (ink) and weight, not dash: dash means "estimated". */}
+          <path d={g.socLine} fill="none" stroke="var(--color-text)" strokeWidth={1.25} strokeOpacity={0.85} />
           <line x1={g.pl} x2={g.xr} y1={g.y0} y2={g.y0} stroke="var(--color-text)" strokeWidth={2} />
-          {showNow && <line x1={g.nowX} x2={g.nowX} y1={g.pt} y2={g.yb} stroke="var(--color-accent)" strokeWidth={2} />}
+          {/* Last-reading marker: 2px accent, 3px overshoot; after it the day stays empty ground. */}
+          {showNow && <line x1={g.nowX} x2={g.nowX} y1={g.pt - 3} y2={g.yb + 3} stroke="var(--color-accent)" strokeWidth={2} />}
           {h && (
             <>
               <line x1={hx} x2={hx} y1={g.pt} y2={g.yb} stroke="var(--color-text)" strokeWidth={1} />
@@ -108,7 +100,7 @@ export function DayPowerChart({ P, date, width, height, live, daylight }: Props)
         ))}
         {showNow && (
           <div className="abs" style={{ left: g.nowX + 6, top: g.H - DAY_NOW_OFFSET, transform: "translateY(-50%)" }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: "var(--color-accent)" }}>NOW {hm(g.lastT)}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-accent)" }}>{hm(g.lastT)}</span>
           </div>
         )}
         {h && (

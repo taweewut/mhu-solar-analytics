@@ -1,85 +1,62 @@
 import { Moon, Sun } from "@/components/Icons";
 import type { Daylight } from "@/lib/battery";
 import { hm } from "@/lib/format";
-import { COLORS } from "@/lib/sankey";
 
-// Sun / moon bands: when PV is up (the battery charges) and when the house runs on the
-// battery. Shared by the Battery heatmaps (hour columns) and the 24-h line charts (minutes).
-
-export const SUN_BG = `color-mix(in srgb, ${COLORS.pv} 20%, var(--color-bg))`;
-export const MOON = "#5b6ea8";
-export const MOON_BG = `color-mix(in srgb, ${MOON} 16%, var(--color-bg))`;
+// Sun / moon strip (design review 3b §2): a 6px band over any time-of-day axis — night ink 9 %
+// (dark: #f1efee 13 %), day #e9a825 42 % (dark 58 %) — with the sunrise / sunset times on the
+// band edges. No behaviour words: the strip shows the sun, the data shows what the battery did.
 
 export const sunTitle = (d: Daylight) =>
-  `Sun up ${hm(d.rise)}–${hm(d.set)} (${d.days === 1 ? "this day" : `median of ${d.days} days`}): PV charges the battery`;
-export const MOON_TITLE = "Night: the battery discharges to run the house";
+  `Sun up ${hm(d.rise)}–${hm(d.set)} (${d.days === 1 ? "this day" : `median of ${d.days} days`}; first and last PV > 50 W)`;
 
-export function BandIcon({ sun }: { sun: boolean }) {
-  return <span style={{ display: "flex", color: sun ? COLORS.pv : MOON }}>{sun ? <Sun size={14} /> : <Moon size={13} />}</span>;
-}
-
-const bandStyle = (sun: boolean, height: number): React.CSSProperties => ({
-  height,
-  background: sun ? SUN_BG : MOON_BG,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  fontSize: 11,
-  fontWeight: 600,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-});
-
-/**
- * Minute-accurate sun / moon bar over a 24-h line chart's plot area (`left` = the plot's left
- * edge, `width` = its width): night 00:00 → sunrise, day sunrise → sunset, night → 24:00.
- */
-export function DayNightBar({ d, left, width, height = 18 }: { d: Daylight; left: number; width: number; height?: number }) {
-  const x = (t: number) => (t / 1440) * width;
-  const bands: [number, number, boolean][] = [
-    [0, d.rise, false],
-    [d.rise, d.set, true],
-    [d.set, 1440, false],
-  ];
+/** The strip itself, filling its (relative) container's width = the plot's x-range. */
+function Strip({ d, compact }: { d: Daylight; compact?: boolean }) {
+  const pct = (t: number) => `${(t / 1440) * 100}%`;
+  const label: React.CSSProperties = {
+    position: "absolute",
+    bottom: compact ? 8 : 9,
+    display: "flex",
+    alignItems: "center",
+    gap: 3,
+    fontSize: compact ? 10 : 11,
+    fontVariantNumeric: "tabular-nums",
+    color: "var(--muted-72)",
+    whiteSpace: "nowrap",
+  };
   return (
-    <div style={{ position: "relative", marginLeft: left, width, height, marginBottom: 4 }}>
-      {bands.map(([from, to, sun]) =>
-        to > from ? (
-          <div
-            key={from}
-            title={sun ? sunTitle(d) : MOON_TITLE}
-            style={{ ...bandStyle(sun, height), position: "absolute", left: x(from), width: x(to) - x(from) - (to < 1440 ? 1 : 0) }}
-          >
-            <BandIcon sun={sun} />
-            {sun && x(to) - x(from) > 130 && <span>{`${hm(d.rise)}–${hm(d.set)}`}</span>}
-          </div>
-        ) : null,
-      )}
+    <div title={sunTitle(d)} style={{ position: "relative", height: compact ? 20 : 22 }}>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 6, background: "var(--night)" }} />
+      <div style={{ position: "absolute", left: pct(d.rise), width: pct(d.set - d.rise), bottom: 0, height: 6, background: "var(--sun)" }} />
+      <span style={{ ...label, left: pct(d.rise) }}>
+        {!compact && <Sun size={11} />}
+        {hm(d.rise)}
+      </span>
+      <span style={{ ...label, right: `${(1 - d.set / 1440) * 100}%` }}>
+        {hm(d.set)}
+        {!compact && <Moon size={11} />}
+      </span>
     </div>
   );
 }
 
-/** Hour-column version for the Battery heatmaps (a row of the `.heatmap` grid). */
+/** Over a 24-h line chart's plot area: `left` = the plot's left edge, `width` = its width. */
+export function DayNightBar({ d, left, width, compact }: { d: Daylight; left: number; width: number; compact?: boolean }) {
+  return (
+    <div style={{ marginLeft: left, width, marginBottom: 4 }}>
+      <Strip d={d} compact={compact ?? width < 400} />
+    </div>
+  );
+}
+
+/** A row of the `.heatmap` grid (label column + the 24 hour columns). */
 export function DayNightStrip({ d, mobile }: { d: Daylight | null; mobile: boolean }) {
   if (!d) return null;
-  const h = mobile ? 20 : 24;
-  const band = (from: number, to: number, sun: boolean) => {
-    if (to <= from) return null;
-    const wide = !mobile && to - from >= 4;
-    return (
-      <div key={`${sun}${from}`} title={sun ? sunTitle(d) : MOON_TITLE} style={{ ...bandStyle(sun, h), gridColumn: `${from + 2} / ${to + 2}` }}>
-        <BandIcon sun={sun} />
-        {wide && <span>{sun ? `${hm(d.rise)}–${hm(d.set)} · charging` : "discharging"}</span>}
-      </div>
-    );
-  };
   return (
     <>
       <span />
-      {band(0, d.fromHour, false)}
-      {band(d.fromHour, d.toHour, true)}
-      {band(d.toHour, 24, false)}
+      <div style={{ gridColumn: "2 / -1", marginBottom: 2 }}>
+        <Strip d={d} compact={mobile} />
+      </div>
     </>
   );
 }

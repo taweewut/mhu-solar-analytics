@@ -1,27 +1,62 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { DayNightStrip } from "@/components/DayNight";
 import { GroupedBarChart } from "@/components/GroupedBarChart";
 import { KpiGrid, type Kpi } from "@/components/Kpis";
-import { withInfo } from "@/lib/kpis";
 import { PageTitle } from "@/components/ui";
-import { GridRow, Legend, Section } from "@/components/ui2";
-import { daylight, equivalentCycles, roundTrip, socFill, socHeatmap, sunriseReading, tempFill, tempHeatmap, type TempRow } from "@/lib/battery";
-import { DayNightStrip } from "@/components/DayNight";
-import { bmsSince } from "@/lib/health";
+import { GridRow, Legend, LegendRow, Section, StateRow } from "@/components/ui2";
+import {
+  daylight,
+  equivalentCycles,
+  lowestDays,
+  roundTrip,
+  socCell,
+  socHeatmap,
+  sunriseReading,
+  tempFill,
+  tempHeatmap,
+  type Daylight,
+  type HeatRow,
+  type TempRow,
+} from "@/lib/battery";
 import type { BarGroup } from "@/lib/charts";
 import { readingsFor, sumDaily } from "@/lib/energy";
 import { dm, dmy, energyText, hm, minuteOfDay } from "@/lib/format";
+import { useHome } from "@/lib/home";
+import { withInfo } from "@/lib/kpis";
 import { useWidth } from "@/lib/layout";
 import type { Model } from "@/lib/model";
 import { COLORS } from "@/lib/sankey";
-import { useHome } from "@/lib/home";
 import { useTrendMode } from "@/lib/trendMode";
 import { monthSlots } from "@/lib/trends";
 import type { BmsRow, DailyRow, FiveMinRow } from "@/lib/types";
 
+// Battery (2b), per the design review (23/09/2026, mocks 3c desktop / 3d–3e mobile).
+
 const DISCHARGED = "color-mix(in srgb, #3fa66a 45%, var(--color-bg))";
 const pct = (r: number | null) => (r == null ? "—" : `${Math.round(r * 100)} %`);
+const addDays = (iso: string, n: number) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
-export function Battery({ mobile, fiveMin, daily, bms, model }: { mobile: boolean; fiveMin: FiveMinRow[]; daily: DailyRow[]; bms: BmsRow[]; model: Model }) {
+export function Battery({
+  mobile,
+  fiveMin,
+  daily,
+  bms,
+  model,
+  paused,
+}: {
+  mobile: boolean;
+  fiveMin: FiveMinRow[];
+  daily: DailyRow[];
+  bms: BmsRow[];
+  model: Model;
+  /** The live fetch is paused (daily API limit): "SOC now" says so. */
+  paused?: boolean;
+}) {
   const { mode } = useTrendMode();
   const { home } = useHome();
   // This page is only offered for homes with a battery (lib/home routeAvailable).
@@ -32,45 +67,54 @@ export function Battery({ mobile, fiveMin, daily, bms, model }: { mobile: boolea
   const heat = useMemo(() => socHeatmap(fiveMin, today, 14), [fiveMin, today]);
   const tempHeat = useMemo(() => tempHeatmap(bms, today, 14), [bms, today]);
   const sun = useMemo(() => daylight(fiveMin, today, 14), [fiveMin, today]);
-  const bmsFrom = useMemo(() => bmsSince(bms), [bms]);
-  const lastBms = useMemo(() => bms.reduce<BmsRow | null>((a, r) => (!a || r.time > a.time ? r : a), null), [bms]);
   const slots = useMemo(() => monthSlots(daily), [daily]);
   const life = useMemo(() => sumDaily(daily), [daily]);
   const [barsRef, barsW] = useWidth<HTMLDivElement>();
   const pad = mobile ? 20 : 48;
 
   const last = P.at(-1);
+  // The day is in progress until its last reading of the day (23:55) arrives.
+  const lastT = last && last.t < 1435 ? last.t : null;
   const rise = sunriseReading(P);
   const cycles = equivalentCycles(life.discharge, battery.kwh);
-  const months = Math.round((Date.parse(model.asOf) - Date.parse(model.commissioned)) / 86_400_000 / 30.44);
-  const kpis: Kpi[] = withInfo([
-    { label: "SOC now", th: "ระดับแบตตอนนี้", value: last ? String(last.soc) : "—", unit: "%", sub: last ? `at ${hm(last.t)}` : "no 5-min data" },
-    { label: "SOC at sunrise", th: "ระดับแบตตอนเช้า", value: rise ? String(rise.soc) : "—", unit: "%", sub: rise ? `first PV > 50 W at ${hm(rise.t)}` : "no PV > 50 W yet" },
-    { label: "State of health", th: "สุขภาพแบต (SOH)", value: last?.soh != null ? String(Math.round(last.soh)) : "—", unit: "%", sub: `BMS reading · ${months} months in` },
-    {
-      label: "Equivalent cycles",
-      th: "รอบเทียบเท่า",
-      value: String(Math.round(cycles)),
-      sub: `${(daily.length ? cycles / daily.length : 0).toFixed(2)} per day · ${energyText(life.discharge)} out`,
-    },
-    { label: "Round-trip", th: "ประสิทธิภาพไป-กลับ", value: pct(roundTrip(life.discharge, life.charge)).replace(" %", ""), unit: "%", sub: "lifetime discharge ÷ charge" },
-  ], [
+  const kpis: Kpi[] = withInfo(
+    [
+      { label: "SOC now", th: "ระดับแบตตอนนี้", value: last ? String(last.soc) : "—", unit: "%", sub: last ? `at ${hm(last.t)}${paused ? " · paused" : ""}` : "no 5-min data" },
+      { label: "SOC at sunrise", th: "ระดับแบตตอนเช้า", value: rise ? String(rise.soc) : "—", unit: "%", sub: rise ? `first PV > 50 W at ${hm(rise.t)}` : "no PV > 50 W yet" },
+      { label: "State of health", th: "สุขภาพแบต (SOH)", value: last?.soh != null ? String(Math.round(last.soh)) : "—", unit: "%", sub: "BMS reading" },
+      {
+        label: "Equivalent cycles",
+        th: "รอบเทียบเท่า",
+        value: String(Math.round(cycles)),
+        sub: `${(daily.length ? cycles / daily.length : 0).toFixed(2)} per day · ${energyText(life.discharge)} out`,
+      },
+      { label: "Round-trip", th: "ประสิทธิภาพไป-กลับ", value: pct(roundTrip(life.discharge, life.charge)).replace(" %", ""), unit: "%", sub: "lifetime discharge ÷ charge" },
+    ],
+    [
       ["Battery state of charge at the latest 5-minute reading."],
       ["State of charge when the sun came up: at the first reading with PV above 50 W.", "It shows how close the battery gets to empty overnight — a low number means the battery barely covers the night."],
       ["State of health: remaining capacity compared with new, reported by the battery's BMS.", "LiFePO4 typically loses 1–3 % a year."],
       [`Total discharged ÷ ${battery.kwh} kWh: how many times the battery has been fully emptied, in effect.`, "LiFePO4 is typically rated for 4,000–6,000 cycles."],
-      ["Energy out ÷ energy in since switch-on (discharge ÷ charge).", "The rest is lost converting and storing it; around 90 % is normal for LiFePO4 plus the inverter."],
-    ]);
+      [
+        "Energy out of the battery ÷ energy put in. 90–95 % is normal for LiFePO4.",
+        `discharge ${energyText(life.discharge)} ÷ charge ${energyText(life.charge)}`,
+      ],
+    ],
+  );
+  kpis[4].source = "Inverter daily totals";
 
+  // Monthly bars: a partial month (switch-on or the current month) is tagged and its label dimmed.
   const groups = useMemo(
     () =>
       slots.map<BarGroup>((m) => {
         const d = m.data;
         const div = d && per ? d.days : 1;
+        const partial = !!d && (m.firstDay! > 1 || m.lastDay! < m.daysInMonth);
         return {
           label: m.label,
-          sub: d ? `${d.days} days` : "",
+          sub: d ? `${d.days} days${partial ? " · partial" : ""}` : "",
           top: d ? pct(roundTrip(d.fromBat, d.toBat)) : undefined,
+          partial,
           vals: d ? [{ v: d.toBat / div, color: COLORS.bat }, { v: d.fromBat / div, color: DISCHARGED }] : null,
         };
       }),
@@ -78,179 +122,328 @@ export function Battery({ mobile, fiveMin, daily, bms, model }: { mobile: boolea
   );
   const barFmt = useMemo(() => (per ? (v: number) => v.toFixed(0) : (v: number) => Math.round(v).toLocaleString("en-US")), [per]);
 
-  const loaded = heat.filter((r) => r.loaded);
-  const heatNote =
-    (loaded.length === 1
-      ? `Only ${dmy(loaded[0].date)} is loaded. Earlier rows fill in when the daily 5-min backfill runs. `
-      : loaded.length < heat.length
-        ? `${loaded.length} of ${heat.length} days loaded; hatched days fill in when the 5-min backfill runs. `
-        : "") +
-    "Look for the morning low point: how close the battery gets to empty before sunrise." +
-    (sun
-      ? ` Sun / moon: median sunrise ${hm(sun.rise)} and sunset ${hm(sun.set)} over the last ${sun.days} days (first and last PV > 50 W): the battery charges under the sun and carries the house through the night.`
-      : "");
+  const hasAfter = heat.some((r) => r.today && r.cells.some((c) => c.kind === "future"));
+  const hasMissing = heat.some((r) => r.cells.some((c) => c.kind === "missing"));
+  const lows = lowestDays(heat);
+  const socNote = mobile
+    ? "Tap a cell for the hourly value. The daily low comes just before sunrise, in the faintest cells of each row."
+    : "The lowest point of each row is just before sunrise." +
+      (lows.length === 2 ? ` ${dm(lows[1].date)} and ${dm(lows[0].date)} dropped to ${lows[0].low}–${lows[1].low} %.` : "") +
+      (sun ? " Sun times are the 14-day median of first and last PV > 50 W." : "");
 
   return (
     <>
-      <div style={{ padding: `${mobile ? 16 : 28}px ${pad}px 0` }}>
+      <div style={{ padding: `${mobile ? 20 : 32}px ${pad}px 0` }}>
         <PageTitle mobile={mobile} title="Battery" sub={`แบตเตอรี่ · ${battery.label} · ≈${battery.kwh} kWh`} />
       </div>
-      <KpiGrid plain mobile={mobile} items={kpis} style={{ margin: mobile ? "16px 0 0" : `20px ${pad}px 0` }} />
+      <KpiGrid plain mobile={mobile} items={mobile ? kpis.slice(0, 4) : kpis} style={{ margin: mobile ? "16px 0 0" : `24px ${pad}px 0` }} />
 
       <Section
-        style={{ margin: `28px ${pad}px 0` }}
+        rule={false}
+        style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0` }}
         en="State of charge by hour"
-        th="ระดับแบตเตอรี่รายชั่วโมง · last 14 days"
+        th={mobile ? "ระดับแบตเตอรี่รายชั่วโมง · last 14 days" : "ระดับแบตเตอรี่รายชั่วโมง · hourly mean · last 14 days"}
         extra={
           <>
-            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-              0 %
-              <span style={{ width: mobile ? 80 : 160, height: 10, background: "linear-gradient(90deg, color-mix(in srgb, #3fa66a 6%, var(--color-bg)), #3fa66a)" }} />
-              100 %
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-              <span className="hatch" style={{ width: 14, height: 10, border: "1px solid var(--color-divider)" }} />
-              Not loaded yet
-            </span>
+            <LegendRow>
+              <Ramp from={socCell(0)} to={socCell(100)} lo="0 %" hi="100 %" mobile={mobile} />
+            </LegendRow>
+            <StateRow after={hasAfter} last={lastT != null ? hm(lastT) : null} noData={hasMissing} />
           </>
         }
-        note={heatNote}
+        note={socNote}
       >
-        <div className="heatmap" role="table" aria-label="Hourly mean state of charge, last 14 days">
-          <DayNightStrip d={sun} mobile={mobile} />
-          <span />
-          {Array.from({ length: 24 }, (_, h) => (
-            <span key={h} className="muted" style={{ fontSize: 10 }}>
-              {h % 3 === 0 ? String(h).padStart(2, "0") : ""}
-            </span>
-          ))}
-          {heat.map((r) => (
-            <HeatRowView key={r.date} row={r} mobile={mobile} />
-          ))}
-        </div>
+        <SocHeatmap rows={heat} sun={sun} lastT={lastT} mobile={mobile} />
       </Section>
 
-      <Section
-        style={{ margin: `28px ${pad}px 0` }}
-        en="Battery temperature by hour"
-        th="อุณหภูมิแบตเตอรี่รายชั่วโมง (BMS) · last 14 days"
-        extra={
-          <>
-            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-              20 °C
-              <span style={{ width: mobile ? 80 : 160, height: 10, background: `linear-gradient(90deg, ${tempFill(20)}, ${tempFill(45)})` }} />
-              45 °C
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-              <span className="hatch" style={{ width: 14, height: 10, border: "1px solid var(--color-divider)" }} />
-              Not logged
-            </span>
-          </>
-        }
-        note={
-          (lastBms?.temp_max_c != null
-            ? `Now ${lastBms.temp_min_c ?? "—"}–${lastBms.temp_max_c} °C (coolest–warmest sensor) at ${hm(minuteOfDay(lastBms.time))}. `
-            : "") +
-          `Warmest BMS sensor each hour, sampled every 15 min${bmsFrom ? ` since ${dmy(bmsFrom)}` : ""}. The BMS reading is live-only, so earlier days stay hatched. Compare with the SOC rows above: a pack that heats up while charging or discharging hard is working near its limits. LiFePO4 usually charges within 0–45 °C (check the datasheet).`
-        }
-      >
-        <div className="heatmap" role="table" aria-label="Hourly warmest battery temperature, last 14 days">
-          <DayNightStrip d={sun} mobile={mobile} />
-          <span />
-          {Array.from({ length: 24 }, (_, h) => (
-            <span key={h} className="muted" style={{ fontSize: 10 }}>
-              {h % 3 === 0 ? String(h).padStart(2, "0") : ""}
-            </span>
-          ))}
-          {tempHeat.map((r) => (
-            <TempRowView key={r.date} row={r} mobile={mobile} />
-          ))}
-        </div>
-      </Section>
+      <TempSection rows={tempHeat} bms={bms} sun={sun} lastT={lastT} mobile={mobile} pad={pad} />
 
-      <div className="split" style={{ margin: `28px ${pad}px 0` }}>
-        <Section
-          en="Charge and discharge"
-          th={`ชาร์จ · จ่ายไฟ · ${per ? "kWh / day" : "kWh / month"} · label = round-trip %`}
-          extra={
-            <>
-              <Legend color={COLORS.bat}>Charged</Legend>
-              <Legend color={DISCHARGED}>Discharged</Legend>
-            </>
-          }
-        >
-          <div ref={barsRef} className={mobile ? "hscroll" : undefined}>
-            <GroupedBarChart label="Battery charge and discharge per month" width={mobile ? Math.max(barsW, slots.length * 80 + 70) : 768} height={300} groups={groups} fmt={barFmt} />
-          </div>
-        </Section>
-        <Section en="Cycles and efficiency" th="รอบการใช้งาน · ประสิทธิภาพ" note={`Cycles = discharge ÷ ${battery.kwh} kWh. Round-trip = discharge ÷ charge per month; partial months include SOC carry-over.`}>
-          <div style={{ display: "flex", flexDirection: "column", fontSize: 14 }}>
-            <GridRow head cols="1fr 1fr 1fr">
-              <span>Month</span>
-              <span style={{ textAlign: "right" }}>Cycles</span>
-              <span style={{ textAlign: "right" }}>Round-trip</span>
-            </GridRow>
-            {slots.map((m) => {
-              const partial = m.data && (m.firstDay! > 1 || m.lastDay! < m.daysInMonth) ? ` (${m.firstDay}–${m.lastDay})` : "";
-              return (
-                <GridRow key={m.key} cols="1fr 1fr 1fr">
-                  <span style={{ fontWeight: 600 }}>
-                    {m.label}
-                    {partial}
-                  </span>
-                  <span style={{ textAlign: "right" }}>{m.data ? equivalentCycles(m.data.fromBat, battery.kwh).toFixed(1) : "—"}</span>
-                  <span style={{ textAlign: "right" }}>{m.data ? pct(roundTrip(m.data.fromBat, m.data.toBat)) : <span className="muted">not loaded</span>}</span>
-                </GridRow>
-              );
-            })}
-          </div>
-        </Section>
+      {mobile ? (
+        <MonthsList slots={slots} kwh={battery.kwh} pad={pad} />
+      ) : (
+        <div className="split" style={{ margin: `32px ${pad}px 0` }}>
+          <Section
+            en="Charge and discharge"
+            th={`ชาร์จ · จ่ายไฟ · ${per ? "kWh / day" : "kWh / month"} · label = round-trip`}
+            extra={
+              <>
+                <LegendRow>
+                  <Legend color={COLORS.bat}>Charged</Legend>
+                  <Legend color={DISCHARGED}>Discharged</Legend>
+                </LegendRow>
+                <span className="muted-72" style={{ fontSize: 11 }}>
+                  Partial month: label at 60 %, carry-over not netted
+                </span>
+              </>
+            }
+          >
+            <div ref={barsRef}>
+              <GroupedBarChart label="Battery charge and discharge per month" width={Math.min(barsW, 768)} height={300} groups={groups} fmt={barFmt} />
+            </div>
+          </Section>
+          <Section en="Cycles and efficiency" th="รอบการใช้งาน · ประสิทธิภาพ" note={`Cycles = discharge ÷ ${battery.kwh} kWh. Round-trip = discharge ÷ charge per month.`}>
+            <div style={{ display: "flex", flexDirection: "column", fontSize: 14 }}>
+              <GridRow head cols="1fr 1fr 1fr">
+                <span>Month</span>
+                <span style={{ textAlign: "right" }}>Cycles</span>
+                <span style={{ textAlign: "right" }}>Round-trip</span>
+              </GridRow>
+              {slots.map((m) => {
+                const partial = !!m.data && (m.firstDay! > 1 || m.lastDay! < m.daysInMonth);
+                return (
+                  <GridRow key={m.key} cols="1fr 1fr 1fr">
+                    <span style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                      {m.label}
+                      {partial && <span className="tag-partial">{`${m.firstDay}–${m.lastDay}`}</span>}
+                    </span>
+                    <span style={{ textAlign: "right" }}>{m.data ? equivalentCycles(m.data.fromBat, battery.kwh).toFixed(1) : "—"}</span>
+                    <span style={{ textAlign: "right", opacity: partial ? 0.6 : 1 }}>{m.data ? pct(roundTrip(m.data.fromBat, m.data.toBat)) : <span className="muted">no data</span>}</span>
+                  </GridRow>
+                );
+              })}
+            </div>
+          </Section>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Legend ramp: 120×10 (72×8 on mobile) between two labels. */
+function Ramp({ from, to, lo, hi, mobile }: { from: string; to: string; lo: string; hi: string; mobile?: boolean }) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+      {lo}
+      <span style={{ width: mobile ? 72 : 120, height: mobile ? 8 : 10, background: `linear-gradient(90deg, ${from}, ${to})` }} />
+      {hi}
+    </span>
+  );
+}
+
+/** Hour axis: every 3 h on desktop, every 6 h on mobile. */
+function HourAxis({ mobile }: { mobile: boolean }) {
+  return (
+    <>
+      <span />
+      <div className="heat-axis">
+        {Array.from({ length: 24 }, (_, h) => (
+          <span key={h}>{h % (mobile ? 6 : 3) === 0 ? String(h).padStart(2, "0") : ""}</span>
+        ))}
       </div>
     </>
   );
 }
 
-function HeatRowView({ row, mobile }: { row: ReturnType<typeof socHeatmap>[number]; mobile: boolean }) {
-  const day = dm(row.date);
+/** Accent last-reading marker across today's row (the only accent use inside charts). */
+const LastMark = ({ t }: { t: number }) => <div className="heat-mark" style={{ left: `calc(${(t / 1440) * 100}% - 1px)` }} />;
+
+function SocHeatmap({ rows, sun, lastT, mobile }: { rows: HeatRow[]; sun: Daylight | null; lastT: number | null; mobile: boolean }) {
+  const [picked, setPicked] = useState<string | null>(null);
   return (
-    <>
-      <span style={{ fontSize: mobile ? 11 : 12, fontWeight: 600, alignSelf: "center", whiteSpace: "nowrap" }}>
-        {row.today ? (mobile ? "Today" : `${day} · today`) : day}
-      </span>
-      {row.cells.map((c, h) => {
-        const hh = `${String(h).padStart(2, "0")}:00`;
-        if (c.kind === "soc")
+    <div>
+      <div className="heatmap" role="table" aria-label="Hourly mean state of charge, last 14 days">
+        <DayNightStrip d={sun} mobile={mobile} />
+        <HourAxis mobile={mobile} />
+        {rows.map((r) => {
+          const day = dm(r.date);
           return (
-            <div key={h} className="heat-cell" title={`${day} ${hh} · SOC ${c.soc} %`} style={{ background: socFill(c.soc), color: c.soc > 60 ? "#0f2d1b" : "var(--color-text)" }}>
-              <span style={{ fontSize: 10, fontWeight: 600 }}>{h % 3 === 0 ? c.soc : ""}</span>
+            <div key={r.date} style={{ display: "contents" }} role="row">
+              <span className="heat-label" style={{ fontWeight: r.today ? 700 : 400 }}>
+                {r.today ? (mobile ? "Today" : `${day} · today`) : day}
+              </span>
+              <div className="heat-row">
+                {r.cells.map((c, h) => {
+                  if (c.kind === "soc")
+                    return (
+                      <div
+                        key={h}
+                        className={`heat-cell${c.soc < 55 ? " low" : ""}`}
+                        title={`${day} ${hh(h)} · SOC ${c.soc} %`}
+                        onClick={() => setPicked(`${day} ${hh(h)} · SOC ${c.soc} %`)}
+                        style={{ background: socCell(c.soc) }}
+                      >
+                        <span>{h % 3 === 0 ? c.soc : ""}</span>
+                      </div>
+                    );
+                  if (c.kind === "future") return <div key={h} className="heat-cell heat-after" title={`${day} ${hh(h)} · after the last reading`} />;
+                  return <div key={h} className="heat-cell hatch" title={r.loaded ? `${day} ${hh(h)} · no data` : `${day} · no data`} />;
+                })}
+                {r.today && lastT != null && <LastMark t={lastT} />}
+              </div>
             </div>
           );
-        if (c.kind === "future") return <div key={h} className="heat-cell" title={`${day} ${hh} · later today`} style={{ background: "var(--color-surface)" }} />;
-        return <div key={h} className="heat-cell hatch" title={row.loaded ? `${day} ${hh} · no readings` : `${day} · not loaded`} />;
-      })}
-    </>
+        })}
+      </div>
+      {mobile && picked && (
+        <div className="caption" style={{ marginTop: 6, fontWeight: 600, color: "var(--color-text)" }}>
+          {picked}
+        </div>
+      )}
+    </div>
   );
 }
 
-function TempRowView({ row, mobile }: { row: TempRow; mobile: boolean }) {
-  const day = dm(row.date);
-  return (
+/**
+ * Battery temperature by hour. The BMS reading is live-only (logged every 15 min from the day
+ * the poll was installed), so days before that are "not tracked yet": collapsed into one caption
+ * row with the latest reading — never a two-week hatched block that reads as an outage.
+ */
+function TempSection({ rows, bms, sun, lastT, mobile, pad }: { rows: TempRow[]; bms: BmsRow[]; sun: Daylight | null; lastT: number | null; mobile: boolean; pad: number }) {
+  const logged = rows.filter((r) => r.tracked);
+  const untracked = rows.filter((r) => !r.tracked);
+  const start = bms.reduce<string | null>((a, r) => (a == null || r.time < a ? r.time : a), null);
+  const latest = bms.reduce<BmsRow | null>((a, r) => (!a || r.time > a.time ? r : a), null);
+  const full = start ? dmy(addDays(start.slice(0, 10), 13)) : null;
+  const latestText = latest?.temp_max_c != null ? `${latest.temp_min_c ?? "—"}–${latest.temp_max_c} °C` : "—";
+  const showGrid = logged.length > 0 && (!mobile || logged.length >= 2);
+  const hasMissing = logged.some((r) => r.cells.some((c) => c.kind === "missing"));
+  const hasAfter = logged.some((r) => r.today && r.cells.some((c) => c.kind === "future"));
+
+  const facts = (
     <>
-      <span style={{ fontSize: mobile ? 11 : 12, fontWeight: 600, alignSelf: "center", whiteSpace: "nowrap" }}>
-        {row.today ? (mobile ? "Today" : `${day} · today`) : day}
-      </span>
-      {row.cells.map((c, h) => {
-        const hh = `${String(h).padStart(2, "0")}:00`;
-        if (c.kind === "temp")
-          return (
-            <div key={h} className="heat-cell" title={`${day} ${hh} · warmest ${c.c} °C`} style={{ background: tempFill(c.c), color: c.c > 36 ? "#3a1a05" : "var(--color-text)" }}>
-              <span style={{ fontSize: 10, fontWeight: 600 }}>{h % 3 === 0 ? Math.round(c.c) : ""}</span>
-            </div>
-          );
-        if (c.kind === "future") return <div key={h} className="heat-cell" title={`${day} ${hh} · later today`} style={{ background: "var(--color-surface)" }} />;
-        return <div key={h} className="heat-cell hatch" title={row.loaded ? `${day} ${hh} · no sample` : `${day} · not logged`} />;
-      })}
+      <Fact label={`Latest${latest ? ` · ${hm(minuteOfDay(latest.time))}` : ""}`} value={latestText} />
+      {!mobile && <Fact label="Samples" value={String(bms.length)} />}
+      <Fact label={mobile ? "Charge range" : "Charge range (datasheet)"} value="0–45 °C" />
     </>
+  );
+  const notTracked = start
+    ? `BMS temperature is read live every 15 min since ${dmy(start)} ${start.slice(11, 16)}. A row is added each day${full && untracked.length ? `, and the full 14 days will be here on ${full}` : ""}.`
+    : "BMS temperature is read live every 15 min by the scheduled SolisCloud fetch; nothing has been logged yet.";
+
+  return (
+    <Section
+      style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0` }}
+      en={mobile ? "Battery temperature" : "Battery temperature by hour"}
+      th={`อุณหภูมิแบตเตอรี่${mobile ? "" : "รายชั่วโมง"} (BMS) · ${mobile ? "" : "warmest sensor · "}${logged.length} of ${rows.length} days logged`}
+      extra={
+        showGrid ? (
+          <>
+            <LegendRow>
+              <Ramp from={tempFill(20)} to={tempFill(45)} lo="20 °C" hi="45 °C" mobile={mobile} />
+            </LegendRow>
+            <StateRow after={hasAfter} last={hasAfter && lastT != null ? hm(lastT) : null} noData={hasMissing} />
+          </>
+        ) : undefined
+      }
+      note={
+        mobile && !showGrid
+          ? `Not tracked yet · ยังไม่เริ่มบันทึก. ${start ? `Logging started ${dm(start)} ${start.slice(11, 16)}, so the hour grid will appear from tomorrow, one row per day.` : notTracked}`
+          : undefined
+      }
+    >
+      {showGrid && (
+        <div className="heatmap" role="table" aria-label="Hourly warmest battery temperature">
+          <DayNightStrip d={sun} mobile={mobile} />
+          <HourAxis mobile={mobile} />
+          {logged.map((r) => {
+            const day = dm(r.date);
+            const firstLogged = r.cells.findIndex((c) => c.kind !== "before");
+            return (
+              <div key={r.date} style={{ display: "contents" }} role="row">
+                <span className="heat-label" style={{ fontWeight: r.today ? 700 : 400 }}>
+                  {r.today ? (mobile ? "Today" : `${day} · today`) : day}
+                </span>
+                <div className="heat-row">
+                  {r.cells.map((c, h) => {
+                    if (c.kind === "temp")
+                      return (
+                        <div key={h} className={`heat-cell${c.c <= 36 ? " low" : ""}`} title={`${day} ${hh(h)} · warmest ${c.c} °C`} style={{ background: tempFill(c.c) }}>
+                          <span>{h % 3 === 0 || h === firstLogged ? Math.round(c.c) : ""}</span>
+                        </div>
+                      );
+                    if (c.kind === "before") return <div key={h} className="heat-cell" />;
+                    if (c.kind === "future") return <div key={h} className="heat-cell heat-after" title={`${day} ${hh(h)} · after the last reading`} />;
+                    return <div key={h} className="heat-cell hatch" title={`${day} ${hh(h)} · no sample`} />;
+                  })}
+                  {r.today && lastT != null && hasAfter && <LastMark t={lastT} />}
+                  {!mobile && firstLogged > 3 && start?.startsWith(r.date) && (
+                    <span className="muted-72" style={{ position: "absolute", right: `calc(${((24 - firstLogged) / 24) * 100}% + 8px)`, top: 0, bottom: 0, display: "flex", alignItems: "center", fontSize: 11, whiteSpace: "nowrap" }}>
+                      Logging started {start.slice(11, 16)} →
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!mobile && untracked.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "96px minmax(0, 1fr)", marginTop: showGrid ? 8 : 0 }}>
+          <span className="muted-72" style={{ fontSize: 12, paddingTop: 12 }}>
+            {`${dm(untracked[untracked.length - 1].date)}–${dm(untracked[0].date)}`}
+          </span>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto auto", gap: 1, background: "var(--color-divider)", borderTop: "1px solid var(--color-text)", borderBottom: "1px solid var(--color-text)" }}>
+            <div style={{ background: "var(--color-bg)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 2 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Not tracked yet · ยังไม่เริ่มบันทึก</span>
+              <span className="caption">{notTracked}</span>
+            </div>
+            {facts}
+          </div>
+        </div>
+      )}
+      {mobile && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "var(--color-divider)", borderTop: "1px solid var(--color-text)", borderBottom: "1px solid var(--color-text)" }}>
+          {facts}
+        </div>
+      )}
+    </Section>
   );
 }
 
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ background: "var(--color-bg)", padding: "10px 18px", display: "flex", flexDirection: "column", gap: 2 }}>
+      <span className="muted-72" style={{ fontSize: 11 }}>
+        {label}
+      </span>
+      <span className="tnum" style={{ fontSize: 20, fontWeight: 800 }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** Mobile "Months": one row per month instead of a bar chart + table (review 3d). */
+function MonthsList({ slots, kwh, pad }: { slots: ReturnType<typeof monthSlots>; kwh: number; pad: number }) {
+  const rows = slots.filter((m) => m.data);
+  const days = (m: (typeof rows)[number]) => m.data!.days;
+  const max = Math.max(1, ...rows.map((m) => Math.max(m.data!.toBat, m.data!.fromBat) / days(m)));
+  return (
+    <Section
+      style={{ margin: `24px ${pad}px 0` }}
+      en="Months"
+      th="ชาร์จ / จ่าย kWh/day · cycles · round-trip"
+      extra={
+        <LegendRow>
+          <Legend color={COLORS.bat}>Charged</Legend>
+          <Legend color={DISCHARGED}>Discharged</Legend>
+        </LegendRow>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--color-text)" }}>
+        {rows.map((m) => {
+          const d = m.data!;
+          const partial = m.firstDay! > 1 || m.lastDay! < m.daysInMonth;
+          return (
+            <div key={m.key} style={{ display: "grid", gridTemplateColumns: "52px minmax(0, 1fr) 40px 44px", gap: 10, alignItems: "center", minHeight: 44, borderBottom: "1px solid color-mix(in srgb, var(--color-text) 14%, transparent)" }}>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{m.label}</span>
+                {partial && <span className="muted-72" style={{ fontSize: 10 }}>{`${m.firstDay}–${m.lastDay}`}</span>}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <div style={{ height: 6, width: `${(d.toBat / days(m) / max) * 100}%`, background: COLORS.bat }} />
+                <div style={{ height: 6, width: `${(d.fromBat / days(m) / max) * 100}%`, background: DISCHARGED }} />
+              </div>
+              <span className="tnum" style={{ fontSize: 13, textAlign: "right" }}>
+                {equivalentCycles(d.fromBat, kwh).toFixed(1)}
+              </span>
+              <span className="tnum" style={{ fontSize: 13, fontWeight: 600, textAlign: "right", opacity: partial ? 0.6 : 1 }}>
+                {pct(roundTrip(d.fromBat, d.toBat))}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}

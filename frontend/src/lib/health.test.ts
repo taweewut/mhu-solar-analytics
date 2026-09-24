@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DAY_ROWS } from "@/lib/__fixtures__/project";
 import { hm } from "@/lib/format";
-import { bmsDay, bmsSince, completeness, completenessFor, expectedReadings, healthDay, stateLog } from "@/lib/health";
+import { bmsDay, bmsSince, completeness, completenessFor, completenessShade, expectedReadings, healthDay, stateLog, stringRatio } from "@/lib/health";
 import type { BmsRow } from "@/lib/types";
 
 describe("data completeness = readings ÷ expected", () => {
@@ -95,5 +95,19 @@ describe("battery BMS log", () => {
     expect(bmsDay(rows, "2026-09-01")).toBeNull();
     expect(bmsSince(rows)).toBe("2026-09-22");
     expect(bmsSince([])).toBeNull();
+  });
+});
+
+describe("string balance and completeness shading (design review 3f)", () => {
+  const r = (t: number, mppt1: number, mppt2: number) => ({ t, pv: mppt1 + mppt2, mppt1, mppt2 }) as import("@/lib/energy").Reading;
+
+  it("MPPT2 ÷ MPPT1 in %, only while PV is above 400 W", () => {
+    expect(stringRatio([r(600, 100, 99), r(700, 1000, 990), r(710, 0, 500)])).toEqual([[600, null], [700, 99], [710, null]]);
+  });
+
+  it("completeness uses an ink ramp, never battery green", () => {
+    expect(completenessShade(100)).toContain("28%");
+    expect(completenessShade(96)).toContain("16%");
+    expect(completenessShade(80)).toContain("8%");
   });
 });

@@ -210,7 +210,7 @@ export function layoutSankey(f: Flows, opts: SankeyOptions): SankeyLayout {
     const { ys, yt, w } = l;
     const base = { ...l, x1, x2: x0, c1: NODE_COLORS[l.s], c2: NODE_COLORS[l.t], mx: m, my: (ys + yt) / 2 + w / 2 };
     if (!w) {
-      // Zero-value link (e.g. grid charging): keep the path visible as a dashed centreline.
+      // Zero-value link (e.g. grid charging): keep the path visible as a dotted centreline.
       zeros.push({ ...base, d: `M${x1},${ys + 1}C${m},${ys + 1} ${m},${yt} ${x0},${yt}` });
       return;
     }
@@ -310,7 +310,7 @@ export function nodeTip(layout: SankeyLayout, node: LaidNode, utility = "PEA"): 
       break;
     case "bat":
       lines = [
-        "Left side: energy charged into the battery from solar. Grid charging is 0 here (the dashed line).",
+        "Left side: energy charged into the battery from solar. Grid charging is 0 here (the dotted line).",
         "Right side: what the battery gave back to the home.",
       ];
       break;
@@ -375,9 +375,9 @@ export function zeroLegend(layout: Pick<SankeyLayout, "zeros">): string | null {
   const others = layout.zeros.filter((z) => !isGridBat(z)).map((z) => `${SHORT[z.s]} → ${SHORT[z.t]}`);
   const gridBat = layout.zeros.some(isGridBat);
   const why = "the inverter doesn't report grid charging separately, so it's shown as 0";
-  if (!others.length) return `Dashed line = 0 kWh: Grid → Battery (${why}).`;
+  if (!others.length) return `Dotted line = 0 kWh: Grid → Battery (${why}).`;
   return (
-    `Dashed = 0 kWh in this period, the path exists but nothing flowed: ${others.join(", ")}` +
+    `Dotted = 0 kWh in this period, the path exists but nothing flowed: ${others.join(", ")}` +
     (gridBat ? `, and Grid → Battery (${why}).` : ".")
   );
 }

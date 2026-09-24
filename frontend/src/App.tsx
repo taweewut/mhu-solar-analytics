@@ -1,13 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MobileHeader, TabBar, TopNav } from "@/components/Shell";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { dataSource } from "@/lib/api";
-import { MONTH_ABBR, dm, dmy } from "@/lib/format";
 import { capsFor, HomeProvider, routeAvailable } from "@/lib/home";
 import { useHomes } from "@/lib/hooks";
 import { DESKTOP_QUERY, useMedia } from "@/lib/layout";
 import { useModel } from "@/lib/model";
 import { navigate, setCurrentHome, useRoute, type Route } from "@/lib/router";
+import { feedStatus } from "@/lib/status";
 import type { Home } from "@/lib/types";
 import { Battery } from "@/pages/Battery";
 import { Day } from "@/pages/Day";
@@ -54,18 +54,18 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
     if (!available) navigate("overview", undefined, home.id);
   }, [available, home.id]);
 
-  const lastBill = model?.savings.bills.at(-1);
-  const status =
-    route === "savings" && lastBill
-      ? `${home.utility} Log · last bill ${MONTH_ABBR[lastBill.month - 1]} ${lastBill.year}`
-      : (model?.updated ?? "Loading…");
-
-  // The scheduled SolisCloud fetch paused by the daily API budget: say so, so a NOW line that
-  // stops moving explains itself.
-  const paused = fetchStatus?.paused && route !== "savings" ? fetchStatus.paused : null;
-  const pausedTitle = paused
-    ? `SolisCloud ${paused.reason}: new 5-minute readings resume at ${paused.until.slice(11)} (${dmy(paused.until)}). Last check ${fetchStatus!.checked.slice(11, 16)}; the battery sample keeps logging.`
-    : undefined;
+  // The header chip always reports the live data feed (review 3b §3), on every page.
+  const now = useNow(60_000);
+  const feed = model
+    ? feedStatus({
+        lastReading: fiveMin.at(-1)?.time ?? null,
+        lastDay: model.asOf,
+        lastState: fiveMin.at(-1)?.working_state ?? null,
+        fetch: fetchStatus,
+        source: fetchStatus ? `${home.inverter.brand} cloud API · every 15 min` : `${home.inverter.brand} reports (imported)`,
+        now,
+      })
+    : null;
 
   let body: React.ReactNode;
   if (error) body = loadError(error);
@@ -74,20 +74,30 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
   else if (route === "day") body = <Day mobile={mobile} fiveMin={fiveMin} model={model} date={params.get("d")} />;
   else if (route === "savings") body = <Savings mobile={mobile} model={model} bills={bills} daily={daily} />;
   else if (route === "trends") body = <Trends mobile={mobile} daily={daily} model={model} />;
-  else if (route === "battery") body = <Battery mobile={mobile} fiveMin={fiveMin} daily={daily} bms={bms} model={model} />;
+  else if (route === "battery") body = <Battery mobile={mobile} fiveMin={fiveMin} daily={daily} bms={bms} model={model} paused={feed?.kind === "paused"} />;
   else body = <Health mobile={mobile} fiveMin={fiveMin} bms={bms} model={model} />;
 
   const navCaps = caps ?? { fiveMin: false, battery: home.battery != null };
   return (
     <div className={`app ${desktop ? "app-desktop" : "app-mobile"}`}>
       {desktop ? (
-        <TopNav route={route} status={paused ? `${status.replace(" · UTC+7", "")} · paused to ${paused.until.slice(11)}` : status} caps={navCaps} paused={pausedTitle} />
+        <TopNav route={route} feed={feed} caps={navCaps} />
       ) : (
-        <MobileHeader route={route} time={model ? model.lastTime || dm(model.asOf) : "—"} paused={pausedTitle} />
+        <MobileHeader route={route} feed={feed} />
       )}
       <main style={mobile ? { paddingBottom: 24 } : undefined}>{body}</main>
       {mobile && <TabBar route={route} caps={navCaps} />}
       <SettingsDialog />
     </div>
   );
+}
+
+/** The current time, updated every `ms` (so "stale" / "paused" states lapse on their own). */
+function useNow(ms: number): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), ms);
+    return () => window.clearInterval(t);
+  }, [ms]);
+  return now;
 }

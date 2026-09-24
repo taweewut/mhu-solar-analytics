@@ -101,7 +101,13 @@ export function Day({ mobile, fiveMin, model, date: requested }: Props) {
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Swatch color={COLORS.bat} />Battery (+ charge / − discharge)</span>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Swatch color={COLORS.grid} />Grid import</span>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}><Swatch color={COLORS.load} h={3} />Home load</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, borderTop: "2px dashed var(--color-text)" }} />SOC % (right axis)</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 16, height: 1.5, background: "var(--color-text)" }} />SOC % (right axis)</span>
+        {isToday && P.length > 0 && P[P.length - 1].t < 1435 && (
+          <span className="muted-72" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <span style={{ width: 2, height: 12, background: "var(--color-accent)" }} />
+            Last reading {hm(P[P.length - 1].t)}
+          </span>
+        )}
       </div>
 
       <div ref={chartRef} style={{ margin: `8px ${pad}px 0` }}>

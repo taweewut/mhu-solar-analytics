@@ -67,7 +67,7 @@ export function Sankey({ flows, width, height, variant }: Props) {
           />
         ))}
         {layout.zeros.map((z) => (
-          <path key={z.i} d={z.d} fill="none" stroke="#3a7bd5" strokeWidth={1.5} strokeDasharray="3 4" />
+          <path key={z.i} d={z.d} fill="none" stroke="var(--color-text)" strokeOpacity={0.5} strokeWidth={1.2} strokeDasharray="1 3" strokeLinecap="round" />
         ))}
         {layout.nodes.map((n) => (
           <rect
@@ -115,7 +115,7 @@ export function Sankey({ flows, width, height, variant }: Props) {
       ))}
       {zeroText && (
         <div className="muted" style={{ marginTop: 10, display: "flex", alignItems: "flex-start", gap: 8, fontSize: v.sub + 1, lineHeight: 1.4 }}>
-          <span style={{ flex: "none", width: 18, marginTop: "0.7em", borderTop: "2px dashed #3a7bd5" }} />
+          <span style={{ flex: "none", width: 18, marginTop: "0.7em", borderTop: "1.5px dotted color-mix(in srgb, var(--color-text) 60%, transparent)" }} />
           <span>{zeroText}</span>
         </div>
       )}

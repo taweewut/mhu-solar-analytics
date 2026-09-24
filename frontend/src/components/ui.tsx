@@ -1,12 +1,11 @@
 // Small shared pieces in the Modernist language.
 
-export function SectionTitle({ en, th, size = 20 }: { en: string; th: string; size?: number }) {
+/** Chart / section title block (review 3b §2): 22/28 800 (20/26 on mobile), sub 12/16 ink 72 %. */
+export function SectionTitle({ en, th }: { en: string; th: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
-      <span style={{ fontWeight: 800, fontSize: size }}>{en}</span>
-      <span className="muted" style={{ fontSize: 12 }}>
-        {th}
-      </span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <span className="sec-title">{en}</span>
+      <span className="sec-sub">{th}</span>
     </div>
   );
 }

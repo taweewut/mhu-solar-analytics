@@ -45,3 +45,18 @@ export const Settings = (p: P) => (
     <circle cx="12" cy="12" r="3" />
   </Svg>
 );
+export const Info = (p: P) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></Svg>
+);
+export const TriangleAlert = (p: P) => (
+  <Svg {...p}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></Svg>
+);
+export const Check = (p: P) => <Svg {...p}><path d="M20 6 9 17l-5-5" /></Svg>;
+export const ChevronDown = (p: P) => <Svg {...p}><path d="m6 9 6 6 6-6" /></Svg>;
+/** Lucide "pause" drawn as two filled bars (status chip). */
+export const Pause = ({ size = 16 }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="6" y="4" width="3" height="16" fill="currentColor" />
+    <rect x="15" y="4" width="3" height="16" fill="currentColor" />
+  </svg>
+);

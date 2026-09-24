@@ -95,26 +95,33 @@ export function daylight(rows: FiveMinRow[], today: string, days = 14): Daylight
   return { rise: r, set: st, days: rise.length, fromHour: Math.round(r / 60), toHour: Math.round(st / 60) };
 }
 
-/** Heatmap fill: green mixed into the background by SOC %, with a 6 % floor so 0 % stays visible. */
-export const socFill = (soc: number): string => `color-mix(in srgb, #3fa66a ${Math.max(6, soc)}%, var(--color-bg))`;
+/** SOC fill (alias of socCell, used by the legend ramp). */
+export const socFill = (soc: number): string => socCell(soc);
 
 export type TempCell =
   | { kind: "temp"; c: number }
-  | { kind: "future" } // later today
-  | { kind: "missing" }; // no BMS sample that hour / day not logged
+  | { kind: "future" } // after the last sample today
+  | { kind: "before" } // before logging started: not tracked yet (not a gap, never hatched)
+  | { kind: "missing" }; // logging was running but no sample arrived: no data
 
 export interface TempRow {
   date: string;
   today: boolean;
+  /** On or after the day logging started. */
+  tracked: boolean;
   loaded: boolean;
   cells: TempCell[];
 }
 
 /**
  * Warmest BMS sensor per clock hour, last `days` days ending at `today`, newest first. The
- * BMS log is forward-only (a live reading sampled every 15 min), so days before it are empty.
+ * BMS log is forward-only (a live reading sampled every 15 min): hours before its first
+ * sample are "before" (not tracked yet), and only hours after it can be missing.
  */
 export function tempHeatmap(rows: BmsRow[], today: string, days = 14): TempRow[] {
+  const start = rows.reduce<string | null>((a, r) => (a == null || r.time < a ? r.time : a), null);
+  const startDay = start?.slice(0, 10) ?? "9999-99-99";
+  const startHour = start ? Math.floor(minuteOfDay(start) / 60) : 24;
   const byDay = new Map<string, BmsRow[]>();
   for (const r of rows) {
     const d = r.time.slice(0, 10);
@@ -126,6 +133,7 @@ export function tempHeatmap(rows: BmsRow[], today: string, days = 14): TempRow[]
     const isToday = date === today;
     const lastHour = day.length ? Math.max(...day.map((r) => Math.floor(minuteOfDay(r.time) / 60))) : -1;
     const cells: TempCell[] = Array.from({ length: 24 }, (_, h) => {
+      if (date < startDay || (date === startDay && h < startHour)) return { kind: "before" };
       const vals = day
         .filter((r) => Math.floor(minuteOfDay(r.time) / 60) === h && r.temp_max_c != null)
         .map((r) => r.temp_max_c!);
@@ -133,10 +141,22 @@ export function tempHeatmap(rows: BmsRow[], today: string, days = 14): TempRow[]
       if (isToday && h > lastHour) return { kind: "future" };
       return { kind: "missing" };
     });
-    return { date, today: isToday, loaded: day.length > 0, cells };
+    return { date, today: isToday, tracked: date >= startDay, loaded: day.length > 0, cells };
   });
 }
 
-/** Temperature fill: orange mixed into the background from 20 °C (faint) to 45 °C (full). */
+/** The loaded days with the lowest SOC (their hourly minimum), lowest first: the caption's examples. */
+export function lowestDays(rows: HeatRow[], n = 2): { date: string; low: number }[] {
+  return rows
+    .map((r) => ({ date: r.date, low: Math.min(...r.cells.map((c) => (c.kind === "soc" ? c.soc : Infinity))) }))
+    .filter((r) => Number.isFinite(r.low))
+    .sort((a, b) => a.low - b.low)
+    .slice(0, n);
+}
+
+/** SOC heatmap fill (review 3h): #3fa66a at 12 + 0.88·SOC %, over the ramp base (never the ground in dark). */
+export const socCell = (soc: number): string => `color-mix(in srgb, #3fa66a ${Math.round(12 + 0.88 * soc)}%, var(--ramp-base))`;
+
+/** Temperature fill (the one non-energy ramp): 20 °C → 45 °C into #e07a3a, from 12 % over the ramp base. */
 export const tempFill = (c: number): string =>
-  `color-mix(in srgb, #e07b39 ${Math.round(Math.min(100, Math.max(6, ((c - 20) / 25) * 100)))}%, var(--color-bg))`;
+  `color-mix(in srgb, #e07a3a ${Math.round(12 + 0.88 * Math.min(100, Math.max(0, ((c - 20) / 25) * 100)))}%, var(--ramp-base))`;
