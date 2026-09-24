@@ -1,6 +1,6 @@
 # Mhu Solar Analytics on a Synology NAS (Container Manager) — see deploy/nas/README.md.
-# Secrets live in deploy/nas/.env on the NAS (never in git): SolisCloud keys, the web key,
-# the Cloudflare Tunnel token. Data lives in ./data (homes.json + CSVs, copied from the Mac once).
+# Secrets live in deploy/nas/.env on the NAS (never in git): SolisCloud keys and the web key.
+# Data lives in ./data (homes.json + CSVs, copied from the Mac once).
 services:
   web:
     build: { context: ../.., dockerfile: deploy/nas/Dockerfile, target: web }
@@ -27,10 +27,5 @@ services:
       - ./pipeline:/pipeline # optional: solar_pipeline (fetch_solar_report.py + Gmail token; writable for token refresh)
     restart: unless-stopped
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
-    depends_on: [web]
-    restart: unless-stopped
+# The Cloudflare Tunnel connector is not part of this project: it runs on its own in
+# /volume1/docker/cloudflared (host network) and reaches the web UI at 192.168.1.10:8090.
