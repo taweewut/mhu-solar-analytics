@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DAY_ROWS } from "@/lib/__fixtures__/project";
 import { hm } from "@/lib/format";
-import { bmsDay, bmsSince, completeness, completenessFor, completenessShade, expectedReadings, healthDay, stateLog, stringRatio } from "@/lib/health";
+import { bmsDay, bmsSince, completeness, completenessFor, completenessShade, expectedReadings, healthDay, healthHistory, stateLog, stringRatio } from "@/lib/health";
 import type { BmsRow } from "@/lib/types";
 
 describe("data completeness = readings ÷ expected", () => {
@@ -109,5 +109,17 @@ describe("string balance and completeness shading (design review 3f)", () => {
     expect(completenessShade(100)).toContain("28%");
     expect(completenessShade(96)).toContain("16%");
     expect(completenessShade(80)).toContain("8%");
+  });
+});
+
+describe("health history (one line per day, newest first)", () => {
+  it("summarises each day with 5-min data; battery max only where the BMS was logged", () => {
+    const yesterday = DAY_ROWS.map((r) => ({ ...r, time: r.time.replace("2026-09-23", "2026-09-22") }));
+    const bms: BmsRow[] = [{ time: "2026-09-23 10:00:00", temp_min_c: 30, temp_max_c: 32, cell_min_v: null, cell_max_v: null, soc_pct: null }];
+    const hist = healthHistory([...yesterday, ...DAY_ROWS], bms, ["2026-09-22", "2026-09-23"], "2026-09-23", true);
+    expect(hist.map((r) => r.date)).toEqual(["2026-09-23", "2026-09-22"]);
+    expect(hist[0]).toMatchObject({ ok: true, alarms: 0, pct: 100, batMax: 32 });
+    expect(hist[1]).toMatchObject({ pct: 51, batMax: null }); // a finished day counts against 288
+    expect(hist[0].balance).toBeGreaterThan(90);
   });
 });

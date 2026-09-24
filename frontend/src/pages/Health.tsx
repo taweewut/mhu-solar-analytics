@@ -1,14 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { DateNav } from "@/components/DateNav";
 import { DayLineChart } from "@/components/DayLineChart";
 import { Check, ChevronDown, TriangleAlert } from "@/components/Icons";
 import { KpiGrid, type Kpi } from "@/components/Kpis";
 import { PageTitle } from "@/components/ui";
-import { Legend, LegendRow, Section, StateRow } from "@/components/ui2";
+import { Legend, LegendRow, Section, StateRow, WarnTag } from "@/components/ui2";
 import { daylight } from "@/lib/battery";
 import { coverRange, type LineSeries } from "@/lib/charts";
 import { readingsFor } from "@/lib/energy";
-import { dm, dmy, hm, minuteOfDay } from "@/lib/format";
-import { bmsDay, bmsSince, completenessFor, completenessShade, healthDay, SPARSE_MIN, stateLog, stringRatio } from "@/lib/health";
+import { dm, dmy, hm, minuteOfDay, weekday } from "@/lib/format";
+import { navigate } from "@/lib/router";
+import { bmsDay, bmsSince, completenessFor, completenessShade, healthDay, healthHistory, SPARSE_MIN, stateLog, stringRatio, type HealthHistoryRow } from "@/lib/health";
 import { useHome } from "@/lib/home";
 import { withInfo } from "@/lib/kpis";
 import { useWidth } from "@/lib/layout";
@@ -35,10 +37,13 @@ const cellV = (v: number) => `${v.toFixed(2)} V`;
 const MPPT2 = "var(--color-text)";
 const BAT_2 = "color-mix(in srgb, #3fa66a 50%, var(--color-bg))";
 
-export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveMin: FiveMinRow[]; bms: BmsRow[]; model: Model }) {
+export function Health({ mobile, fiveMin, bms, model, date: requested }: { mobile: boolean; fiveMin: FiveMinRow[]; bms: BmsRow[]; model: Model; date?: string | null }) {
   const { home } = useHome();
   const inv = home.inverter;
-  const today = model.dates.at(-1) ?? model.asOf;
+  // Any day with 5-minute data (?d=YYYY-MM-DD); the latest by default.
+  const latest = model.dates.at(-1) ?? model.asOf;
+  const today = requested && model.dates.includes(requested) ? requested : latest;
+  const go = (d: string) => navigate("health", d === latest ? undefined : { d });
   const P = useMemo(() => readingsFor(fiveMin, today), [fiveMin, today]);
   const h = useMemo(() => healthDay(fiveMin, today), [fiveMin, today]);
   const dayRows = useMemo(() => fiveMin.filter((r) => r.time.startsWith(today)), [fiveMin, today]);
@@ -49,7 +54,12 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
   const bmsStart = useMemo(() => bms.reduce<string | null>((a, r) => (a == null || r.time < a ? r.time : a), null), [bms]);
   const last = P.at(-1);
   // The latest day is still in progress until its 23:55 reading arrives.
-  const live = last != null && last.t < 1435;
+  const live = today === latest && last != null && last.t < 1435;
+  const liveLatest = (() => {
+    const lp = fiveMin.at(-1);
+    return lp != null && minuteOfDay(lp.time) < 1435;
+  })();
+  const history = useMemo(() => healthHistory(fiveMin, bms, model.dates, latest, liveLatest), [fiveMin, bms, model.dates, latest, liveLatest]);
   const nowT = live ? last!.t : null;
   // A BMS sample can be newer than the last 5-min reading.
   const bmsNowT = nowT != null && b ? Math.max(nowT, ...b.tempMax.map(([t]) => t)) : nowT;
@@ -116,7 +126,7 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
   const range = dayRows.length ? `${dayRows[0].time.slice(11, 16)}–${dayRows[dayRows.length - 1].time.slice(11, 16)}` : "";
   const kpis: Kpi[] = withInfo(
     [
-      { label: "String balance", th: "สมดุลสตริง", value: balancePct != null ? String(balancePct) : "—", unit: "%", sub: "MPPT2 ÷ MPPT1 today" },
+      { label: "String balance", th: "สมดุลสตริง", value: balancePct != null ? String(balancePct) : "—", unit: "%", sub: `MPPT2 ÷ MPPT1 ${today === latest ? "today" : dm(today)}` },
       {
         label: "Peak PV",
         th: "กำลังสูงสุด",
@@ -125,7 +135,7 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
         sub: peakPct != null ? `${hm(h.peakT)} · ${Math.round(peakPct)} % of ${inv.ratedW! / 1000} kW${peakPct >= 95 ? " · near clipping" : ""}` : `at ${hm(h.peakT)}`,
       },
       { label: "Inverter temp max", th: "อุณหภูมิสูงสุด", value: h.tempMax.toFixed(1), unit: "°C", sub: `at ${hm(h.tempMaxT)}` },
-      { label: "Data today", th: "ความครบถ้วน", value: String(todayC.pct ?? "—"), unit: "%", sub: `${todayC.received} of ${todayC.expected} readings` },
+      { label: today === latest ? "Data today" : `Data ${dm(today)}`, th: "ความครบถ้วน", value: String(todayC.pct ?? "—"), unit: "%", sub: `${todayC.received} of ${todayC.expected} readings` },
     ],
     [
       ["Energy from string 2 (MPPT2) ÷ string 1 (MPPT1) today. Two equal strings sit near 100 %.", `MPPT1 ${h.mppt1Kwh.toFixed(1)} kWh · MPPT2 ${h.mppt2Kwh.toFixed(1)} kWh`],
@@ -158,17 +168,20 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
 
   return (
     <>
-      <div style={{ padding: `${mobile ? 20 : 32}px ${pad}px 0` }}>
-        <PageTitle
-          mobile={mobile}
-          title="Health"
-          sub={["สุขภาพระบบ", [inv.brand, inv.model].filter(Boolean).join(" "), !mobile && inv.sn && `SN ${inv.sn}`, !live && dmy(today)].filter(Boolean).join(" · ")}
-        />
-        {mobile && inv.sn && (
-          <span className="muted-72" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-            SN {inv.sn}
-          </span>
-        )}
+      <div style={{ padding: `${mobile ? 20 : 32}px ${pad}px 0`, display: "flex", alignItems: mobile ? "stretch" : "flex-end", gap: mobile ? 12 : 24, flexDirection: mobile ? "column" : "row" }}>
+        <div style={{ display: "flex", flexDirection: "column", marginRight: "auto" }}>
+          <PageTitle
+            mobile={mobile}
+            title={today === latest ? "Health" : `Health · ${weekday(today)} ${dmy(today)}`}
+            sub={["สุขภาพระบบ", [inv.brand, inv.model].filter(Boolean).join(" "), !mobile && inv.sn && `SN ${inv.sn}`, today === latest && (live ? "today" : dmy(today))].filter(Boolean).join(" · ")}
+          />
+          {mobile && inv.sn && (
+            <span className="muted-72" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+              SN {inv.sn}
+            </span>
+          )}
+        </div>
+        <DateNav date={today} dates={model.dates} latest={latest} onGo={go} />
       </div>
 
       {/* Status summary: the family's question ("is it working?") first. */}
@@ -250,7 +263,15 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
             style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0` }}
             en="Battery (BMS)"
             th={bmsStart ? `แบตเตอรี่ · every 15 min since ${dm(bmsStart)} ${bmsStart.slice(11, 16)}` : "แบตเตอรี่ · logged every 15 min"}
-            note={b ? `${b.samples} of ${SPARSE_MIN} samples. The charts appear after about 6 h of readings.` : "No BMS samples today yet. The scheduled SolisCloud fetch logs one every 15 min."}
+            note={
+              b
+                ? `${b.samples} of ${SPARSE_MIN} samples. The charts appear after about 6 h of readings.`
+                : bmsStart && today < bmsStart.slice(0, 10)
+                  ? `Not tracked on this day: battery logging started ${dm(bmsStart)} ${bmsStart.slice(11, 16)} (the BMS reading is live-only, with no history).`
+                  : today === latest
+                    ? "No BMS samples today yet. The scheduled SolisCloud fetch logs one every 15 min."
+                    : "No BMS samples on this day."
+            }
           >
             {b && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "var(--color-divider)", borderTop: "1px solid var(--color-text)", borderBottom: "1px solid var(--color-text)" }}>
@@ -299,6 +320,8 @@ export function Health({ mobile, fiveMin, bms, model }: { mobile: boolean; fiveM
           </Section>
         )}
       </div>
+
+      <HealthHistory rows={history} selected={today} onPick={go} mobile={mobile} ratedW={inv.ratedW} pad={pad} battery={!!home.battery} />
 
       <div ref={moreRef} style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0`, borderTop: "2px solid var(--color-divider)" }}>
         <span className="muted-72" style={{ display: "block", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", padding: "12px 0 4px" }}>
@@ -361,5 +384,98 @@ function Sparse({ label, value, unit, sub, samples, left }: { label: string; val
         ))}
       </div>
     </div>
+  );
+}
+
+const HIST_ROWS = 30;
+
+/**
+ * Health history (one line per day with 5-minute data, newest first): status, alarms, string
+ * balance, peak PV, inverter max, data completeness and — once logged — battery max. Values
+ * outside the normal band get a warning tag. Tap / click a day to open it above.
+ */
+function HealthHistory({ rows, selected, onPick, mobile, ratedW, pad, battery }: { rows: HealthHistoryRow[]; selected: string; onPick: (d: string) => void; mobile: boolean; ratedW: number | null; pad: number; battery: boolean }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? rows : rows.slice(0, HIST_ROWS);
+  const issues = rows.filter((r) => !r.ok).length;
+  const bal = (r: HealthHistoryRow) => (r.balance == null ? "—" : r.balance < 95 || r.balance > 105 ? <WarnTag>{r.balance} %</WarnTag> : `${r.balance} %`);
+  const temp = (r: HealthHistoryRow) => (r.tempMax >= 60 ? <WarnTag>{r.tempMax.toFixed(1)} °C</WarnTag> : `${r.tempMax.toFixed(1)} °C`);
+  const data = (r: HealthHistoryRow) => (r.pct < 95 ? <WarnTag>{r.pct} %</WarnTag> : `${r.pct} %`);
+  const peak = (r: HealthHistoryRow) => `${(r.peakW / 1000).toFixed(2)} kW${ratedW && r.peakW >= 0.95 * ratedW ? " · clip" : ""}`;
+  const status = (r: HealthHistoryRow) => (
+    <span className="tag-state">
+      {r.ok ? <Check size={10} /> : <TriangleAlert size={10} />}
+      {r.ok ? "Normal" : r.alarms ? `${r.alarms} alarm${r.alarms === 1 ? "" : "s"}` : r.state}
+    </span>
+  );
+  const cols = `1.2fr 1fr 0.9fr 1.1fr 0.9fr 0.8fr${battery ? " 0.8fr" : ""}`;
+  const selStyle = (d: string): React.CSSProperties => (d === selected ? { background: "color-mix(in srgb, var(--color-text) 7%, transparent)" } : {});
+
+  return (
+    <Section
+      style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0` }}
+      en="Health history"
+      th={`ประวัติสุขภาพระบบ · ${rows.length} days with 5-minute data · ${issues ? `${issues} with a state change or alarm` : "all normal"}`}
+      note="Tap a day to open it above. Tags mark values outside the usual range: string balance outside 95–105 %, inverter at 60 °C or more, data under 95 %."
+    >
+      {mobile ? (
+        <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--color-text)" }}>
+          {shown.map((r) => (
+            <button
+              key={r.date}
+              type="button"
+              className="mrow"
+              onClick={() => onPick(r.date)}
+              style={{ ...selStyle(r.date), background: selStyle(r.date).background ?? "none", border: 0, borderBottom: "1px solid color-mix(in srgb, var(--color-text) 14%, transparent)", font: "inherit", color: "inherit", textAlign: "left", cursor: "pointer" }}
+            >
+              <span className="mrow-line">
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{`${weekday(r.date).slice(0, 3)} ${dm(r.date)}`}</span>
+                {status(r)}
+                <span className="mrow-num" style={{ fontSize: 13 }}>
+                  {bal(r)}
+                </span>
+              </span>
+              <span className="caption">
+                Peak {peak(r)} · inverter {r.tempMax.toFixed(1)} °C · data {r.pct} %{r.batMax != null ? ` · battery ${r.batMax} °C` : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", fontSize: 14 }}>
+          <div className="tnum" style={{ display: "grid", gridTemplateColumns: cols, gap: 8, padding: "8px 8px", borderBottom: "1px solid var(--color-text)", fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--muted-72)" }}>
+            <span>Date</span>
+            <span>Status</span>
+            <span style={{ textAlign: "right" }}>String balance</span>
+            <span style={{ textAlign: "right" }}>Peak PV</span>
+            <span style={{ textAlign: "right" }}>Inverter max</span>
+            <span style={{ textAlign: "right" }}>Data</span>
+            {battery && <span style={{ textAlign: "right" }}>Battery max</span>}
+          </div>
+          {shown.map((r) => (
+            <button
+              key={r.date}
+              type="button"
+              onClick={() => onPick(r.date)}
+              className="tnum"
+              style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center", padding: "7px 8px", border: 0, borderBottom: "1px solid color-mix(in srgb, var(--color-text) 14%, transparent)", background: "none", font: "inherit", color: "inherit", textAlign: "left", cursor: "pointer", ...selStyle(r.date) }}
+            >
+              <span style={{ fontWeight: r.date === selected ? 800 : 600 }}>{`${weekday(r.date).slice(0, 3)} ${dmy(r.date)}`}</span>
+              <span>{status(r)}</span>
+              <span style={{ textAlign: "right" }}>{bal(r)}</span>
+              <span style={{ textAlign: "right" }}>{peak(r)}</span>
+              <span style={{ textAlign: "right" }}>{temp(r)}</span>
+              <span style={{ textAlign: "right" }}>{data(r)}</span>
+              {battery && <span style={{ textAlign: "right" }}>{r.batMax != null ? `${r.batMax} °C` : <span className="muted-72">not logged</span>}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {rows.length > HIST_ROWS && (
+        <button type="button" className="btn btn-secondary" style={{ alignSelf: "flex-start" }} onClick={() => setAll((a) => !a)}>
+          {all ? `Show the last ${HIST_ROWS} days` : `Show all ${rows.length} days`}
+        </button>
+      )}
+    </Section>
   );
 }

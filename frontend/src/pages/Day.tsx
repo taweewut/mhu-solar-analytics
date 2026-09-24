@@ -1,7 +1,7 @@
 import { useMemo } from "react";
+import { DateNav } from "@/components/DateNav";
 import { DayPowerChart } from "@/components/DayPowerChart";
 import { daylight } from "@/lib/battery";
-import { Calendar, ChevronLeft, ChevronRight } from "@/components/Icons";
 import { Sankey } from "@/components/Sankey";
 import { Dot, PageTitle, SectionTitle, Swatch } from "@/components/ui";
 import { dayStats, kw2 } from "@/lib/dayChart";
@@ -42,8 +42,6 @@ export function Day({ mobile, fiveMin, model, date: requested, weather = [] }: P
   const [skRef, skW] = useWidth<HTMLDivElement>();
 
   const pad = mobile ? 20 : 48;
-  // Prev / next step between days that have 5-min data.
-  const prev = model.dates.filter((d) => d < date).at(-1);
   const upTo = totals ? hm(totals.lastT) : "";
 
   const kwhv = (v: number) => `${v.toFixed(1)} kWh`;
@@ -76,29 +74,7 @@ export function Day({ mobile, fiveMin, model, date: requested, weather = [] }: P
           title={`Day · ${weekday(date)} ${dmy(date)}`}
           sub={totals ? `รายวัน · 5-minute data · ${totals.count} readings to ${upTo}` : "รายวัน · 5-minute data · no readings"}
         />
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button className="btn btn-secondary btn-icon" aria-label="Previous day" disabled={!prev} onClick={() => prev && go(prev)}>
-            <ChevronLeft />
-          </button>
-          <label className="input date-field" style={{ display: "flex", alignItems: "center", gap: 8, width: 170, minHeight: 36 }}>
-            <Calendar />
-            {dmy(date)}
-            <input
-              type="date"
-              aria-label="Date"
-              value={date}
-              min={model.dates[0]}
-              max={today}
-              onChange={(e) => e.target.value && go(e.target.value)}
-            />
-          </label>
-          <button className="btn btn-secondary btn-icon" aria-label="Next day" disabled={date >= today} onClick={() => go(model.dates.find((d) => d > date) ?? today)}>
-            <ChevronRight />
-          </button>
-          <button className="btn btn-primary" onClick={() => go(today)}>
-            Today
-          </button>
-        </div>
+        <DateNav date={date} dates={model.dates} latest={today} onGo={go} />
       </div>
 
       <div style={{ margin: `20px ${pad}px 0`, borderTop: "2px solid var(--color-divider)", paddingTop: 16, display: "flex", gap: mobile ? "8px 16px" : 24, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>

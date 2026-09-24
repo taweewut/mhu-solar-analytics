@@ -161,3 +161,58 @@ export function stringRatio(P: Reading[]): [number, number | null][] {
 /** Completeness cell shade (review: ink ramp, not battery green): 100 % → 28 %, ≥ 95 % → 16 %, else 8 %. */
 export const completenessShade = (pct: number): string =>
   `color-mix(in srgb, var(--color-text) ${pct >= 100 ? 28 : pct >= 95 ? 16 : 8}%, transparent)`;
+
+export interface HealthHistoryRow {
+  date: string;
+  /** No alarms and a Normal working state all day. */
+  ok: boolean;
+  state: string;
+  alarms: number;
+  /** MPPT2 ÷ MPPT1 energy, % (null without PV). */
+  balance: number | null;
+  peakW: number;
+  tempMax: number;
+  /** Data completeness %, against 288 (or so far, for the day in progress). */
+  pct: number;
+  /** Warmest BMS reading that day (null before battery logging started). */
+  batMax: number | null;
+}
+
+/**
+ * One health line per day with 5-minute data, newest first (the Health page's history table).
+ * `latest` is the day in progress, whose completeness counts only up to its last reading.
+ */
+export function healthHistory(rows: FiveMinRow[], bms: BmsRow[], dates: string[], latest: string, live: boolean): HealthHistoryRow[] {
+  const byDay = new Map<string, FiveMinRow[]>();
+  for (const r of rows) {
+    const d = r.time.slice(0, 10);
+    const list = byDay.get(d);
+    if (list) list.push(r);
+    else byDay.set(d, [r]);
+  }
+  const batMax = new Map<string, number>();
+  for (const b of bms) {
+    const d = b.time.slice(0, 10);
+    if (b.temp_max_c != null) batMax.set(d, Math.max(batMax.get(d) ?? -Infinity, b.temp_max_c));
+  }
+  return [...dates]
+    .reverse()
+    .map((date) => {
+      const day = byDay.get(date) ?? [];
+      const h = healthDay(day, date);
+      if (!h) return null;
+      const c = completenessFor(day, date, live && date === latest);
+      return {
+        date,
+        ok: h.alarms === 0 && /normal/i.test(h.state) && h.stateShare === 1,
+        state: h.state,
+        alarms: h.alarms,
+        balance: h.mppt1Kwh > 0 ? Math.round((h.mppt2Kwh / h.mppt1Kwh) * 100) : null,
+        peakW: h.peakW,
+        tempMax: h.tempMax,
+        pct: c.pct ?? 0,
+        batMax: batMax.get(date) ?? null,
+      };
+    })
+    .filter((r): r is HealthHistoryRow => r != null);
+}
