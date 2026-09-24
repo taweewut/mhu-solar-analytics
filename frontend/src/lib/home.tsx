@@ -17,7 +17,7 @@ export const capsFor = (home: Home, fiveMinDates: string[]): Caps => ({
 
 /** Pages a home can show; the others are left out of its nav. */
 export function routeAvailable(route: Route, caps: Caps): boolean {
-  if (route === "day" || route === "health") return caps.fiveMin;
+  if (route === "day" || route === "health" || route === "tv") return caps.fiveMin;
   if (route === "battery") return caps.battery;
   return true;
 }

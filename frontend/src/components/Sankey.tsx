@@ -15,13 +15,15 @@ interface Props {
   width: number;
   height: number;
   variant: keyof typeof VARIANTS;
+  /** No legends under the diagram (TV mode). */
+  plain?: boolean;
 }
 
 /** What the pointer is over: a ribbon (kWh / % / ฿ tip) or a node (what it means). */
 type Hover = { link: number } | { node: NodeKey } | null;
 
 /** Energy-flow Sankey: SVG ribbons + nodes, HTML labels and tooltips overlaid. */
-export function Sankey({ flows, width, height, variant }: Props) {
+export function Sankey({ flows, width, height, variant, plain }: Props) {
   const v = VARIANTS[variant];
   const { settings } = useSettings();
   const { home } = useHome();
@@ -39,7 +41,7 @@ export function Sankey({ flows, width, height, variant }: Props) {
   const ntip = hoveredNode ? nodeTip(layout, hoveredNode, home.utility) : null;
   const opacity = (l: (typeof layout.links)[number]) =>
     hoveredNode ? nodeLinkOpacity(l, hoveredNode.key) : linkOpacity(l.i, hoveredLink ? hoveredLink.i : null);
-  const zeroText = zeroLegend(layout);
+  const zeroText = plain ? null : zeroLegend(layout);
   // On a phone, small nodes (< 14 % of the height) aren't labelled in the diagram, where their
   // labels collide; they're listed under it as a value legend instead (design review).
   const small = new Set(v.compact ? layout.nodes.filter((n) => n.h < 0.14 * layout.height).map((n) => n.key) : []);

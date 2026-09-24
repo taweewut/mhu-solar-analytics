@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 // Hash routing (#/<home>/<page>?d=2026-09-23) so the static build works from any folder or
 // host without server rewrites. Links without a home (#/day) open the first home.
 
-export type Route = "overview" | "day" | "trends" | "battery" | "savings" | "health";
+export type Route = "overview" | "day" | "trends" | "battery" | "savings" | "health" | "tv";
 
-export const ROUTES: Route[] = ["overview", "day", "trends", "battery", "savings", "health"];
+export const ROUTES: Route[] = ["overview", "day", "trends", "battery", "savings", "health", "tv"];
 
 interface Parsed {
   home: string | null;

@@ -15,6 +15,7 @@ import { Health } from "@/pages/Health";
 import { Overview } from "@/pages/Overview";
 import { Savings } from "@/pages/Savings";
 import { Trends } from "@/pages/Trends";
+import { Tv } from "@/pages/Tv";
 
 const loadError = (error: unknown) => (
   <div className="state" role="alert">
@@ -66,6 +67,13 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
         now,
       })
     : null;
+
+  // TV mode: full screen, no nav (#/<home>/tv?s=20 sets the seconds per slide).
+  if (route === "tv") {
+    if (error) return loadError(error);
+    if (!model || !caps || !available) return <div className="state muted">Loading…</div>;
+    return <Tv fiveMin={fiveMin} model={model} weather={weather} feed={feed} seconds={Number(params.get("s")) || 20} />;
+  }
 
   let body: React.ReactNode;
   if (error) body = loadError(error);
