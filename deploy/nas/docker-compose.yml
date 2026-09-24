@@ -1,0 +1,36 @@
+# Mhu Solar Analytics on a Synology NAS (Container Manager) — see deploy/nas/README.md.
+# Secrets live in deploy/nas/.env on the NAS (never in git): SolisCloud keys, the web key,
+# the Cloudflare Tunnel token. Data lives in ./data (homes.json + CSVs, copied from the Mac once).
+services:
+  web:
+    build: { context: ../.., dockerfile: deploy/nas/Dockerfile, target: web }
+    image: mhu-solar-web
+    environment:
+      SOLAR_WEB_KEY: ${SOLAR_WEB_KEY:?set SOLAR_WEB_KEY in .env}
+    volumes:
+      - ./data:/srv/data:ro
+    ports:
+      - "8090:8080" # LAN: http://<nas>:8090/?key=…
+    restart: unless-stopped
+
+  poller:
+    build: { context: ../.., dockerfile: deploy/nas/Dockerfile, target: poller }
+    image: mhu-solar-poller
+    env_file: .env
+    environment:
+      TZ: Asia/Bangkok
+      MOMSOLAR_SOLIS_USAGE_FILE: /state/solis_usage.json
+    volumes:
+      - ./data:/data
+      - ./state:/state
+      - ./reports:/reports # MhuHome FusionSolar reports saved by solar_pipeline
+      - ./pipeline:/pipeline:ro # optional: solar_pipeline (fetch_solar_report.py + Gmail token)
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on: [web]
+    restart: unless-stopped

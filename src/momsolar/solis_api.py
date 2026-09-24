@@ -50,7 +50,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MIN_INTERVAL = 1.0  # s between calls: half the documented 2 requests/sec
 SLOW_INTERVAL = 5.0  # s between calls once an endpoint has used 80 % of its daily budget
 DEFAULT_BUDGET = 180  # calls per endpoint per UTC day, under the observed 200/day cap
-USAGE_FILE = ROOT / ".solis_usage.json"
+# Persisted call counts; MOMSOLAR_SOLIS_USAGE_FILE moves it (e.g. a Docker state volume).
+USAGE_FILE = Path(os.environ.get("MOMSOLAR_SOLIS_USAGE_FILE") or ROOT / ".solis_usage.json")
 
 
 class SolisApiError(RuntimeError):

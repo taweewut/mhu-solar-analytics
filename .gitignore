@@ -19,3 +19,10 @@ docs/v2-compare/
 # SolisCloud API replies (real data)
 raw_api/
 .solis_usage.json
+
+# NAS deployment state (secrets and data)
+deploy/nas/.env
+deploy/nas/data/
+deploy/nas/state/
+deploy/nas/reports/
+deploy/nas/pipeline/
