@@ -44,7 +44,7 @@ export function App() {
 
 function HomeApp({ home, route, params }: { home: Home; route: Route; params: URLSearchParams }) {
   const desktop = useMedia(DESKTOP_QUERY);
-  const { model, fiveMin, daily, bills, bms, fetchStatus, error } = useModel(home);
+  const { model, fiveMin, daily, bills, bms, fetchStatus, weather, error } = useModel(home);
   const mobile = !desktop;
   const caps = model ? capsFor(home, model.dates) : null;
   const available = !caps || routeAvailable(route, caps);
@@ -71,7 +71,7 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
   if (error) body = loadError(error);
   else if (!model || !caps || !available) body = <div className="state muted">Loading data…</div>;
   else if (route === "overview") body = <Overview mobile={mobile} fiveMin={fiveMin} daily={daily} model={model} caps={caps} />;
-  else if (route === "day") body = <Day mobile={mobile} fiveMin={fiveMin} model={model} date={params.get("d")} />;
+  else if (route === "day") body = <Day mobile={mobile} fiveMin={fiveMin} model={model} date={params.get("d")} weather={weather} />;
   else if (route === "savings") body = <Savings mobile={mobile} model={model} bills={bills} daily={daily} />;
   else if (route === "trends") body = <Trends mobile={mobile} daily={daily} model={model} />;
   else if (route === "battery") body = <Battery mobile={mobile} fiveMin={fiveMin} daily={daily} bms={bms} model={model} paused={feed?.kind === "paused"} />;

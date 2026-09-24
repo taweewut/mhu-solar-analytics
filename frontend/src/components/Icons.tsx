@@ -60,3 +60,28 @@ export const Pause = ({ size = 16 }: P) => (
     <rect x="15" y="4" width="3" height="16" fill="currentColor" />
   </svg>
 );
+export const Cloud = (p: P) => <Svg {...p}><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /></Svg>;
+export const CloudSun = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 2v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="M20 12h2" /><path d="m19.07 4.93-1.41 1.41" />
+    <path d="M15.947 12.65a4 4 0 0 0-5.925-4.128" /><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z" />
+  </Svg>
+);
+export const CloudMoon = (p: P) => (
+  <Svg {...p}><path d="M13 16a3 3 0 1 1 0 6H7a5 5 0 1 1 4.9-6Z" /><path d="M10.1 9A6 6 0 0 1 16 4a4 4 0 0 0 6 6 6 6 0 0 1-3 5.197" /></Svg>
+);
+export const CloudRain = (p: P) => (
+  <Svg {...p}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /><path d="M16 14v6" /><path d="M8 14v6" /><path d="M12 16v6" /></Svg>
+);
+export const CloudDrizzle = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /><path d="M8 19v1" /><path d="M8 14v1" /><path d="M16 19v1" />
+    <path d="M16 14v1" /><path d="M12 21v1" /><path d="M12 16v1" />
+  </Svg>
+);
+export const CloudLightning = (p: P) => (
+  <Svg {...p}><path d="M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973" /><path d="m13 12-3 5h4l-3 5" /></Svg>
+);
+export const CloudFog = (p: P) => (
+  <Svg {...p}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /><path d="M16 17H7" /><path d="M17 21H9" /></Svg>
+);

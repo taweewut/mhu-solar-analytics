@@ -39,6 +39,9 @@ if [[ -n "${MOMSOLAR_SOLIS_KEY_ID:-}" && -n "${MOMSOLAR_SOLIS_KEY_SECRET:-}" ]];
   "$PY" -W ignore -m momsolar.fetch_solis_api --home momhome --out "$OUT"
 fi
 
+echo "== Weather (Open-Meteo, homes with a location)"
+for h in momhome mhuhome; do "$PY" -W ignore -m momsolar.fetch_weather --home "$h" --out "$OUT" || true; done
+
 if [[ -n "${MOMSOLAR_HUAWEI_RAW_DIR:-}" ]]; then
   echo "== MhuHome (Huawei)"
   "$PY" -W ignore -m momsolar.fetch_huawei --home mhuhome --out "$OUT" \

@@ -18,6 +18,7 @@ from momsolar.schema import (
     FT_COLUMNS,
     FT_FILE,
     HOMES_FILE,
+    WEATHER_FILE,
 )
 
 # CSV header → API field, in schema order.
@@ -81,6 +82,13 @@ BMS_FIELDS = {
     "Cell Max(V)": "cell_max_v",
     "SOC(%)": "soc_pct",
 }
+WEATHER_FIELDS = {
+    "Time": "time",
+    "Code": "code",
+    "Cloud(%)": "cloud_pct",
+    "Rain(mm)": "rain_mm",
+    "Radiation(W/m2)": "radiation_wm2",
+}
 TEXT_FIELDS = {"time", "working_state", "alarm_code", "date", "bill_date"}
 
 
@@ -118,6 +126,11 @@ def five_min(home_path: Path, day: str | None = None) -> list[dict]:
 
 def bms(home_path: Path, day: str | None = None) -> list[dict]:
     rows = _read(home_path / BMS_FILE, BMS_FIELDS)
+    return [r for r in rows if r["time"].startswith(day)] if day else rows
+
+
+def weather(home_path: Path, day: str | None = None) -> list[dict]:
+    rows = _read(home_path / WEATHER_FILE, WEATHER_FIELDS)
     return [r for r in rows if r["time"].startswith(day)] if day else rows
 
 

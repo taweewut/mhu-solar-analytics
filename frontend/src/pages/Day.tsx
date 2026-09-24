@@ -11,16 +11,19 @@ import { useWidth } from "@/lib/layout";
 import type { Model } from "@/lib/model";
 import { navigate } from "@/lib/router";
 import { COLORS } from "@/lib/sankey";
-import type { FiveMinRow } from "@/lib/types";
+import type { FiveMinRow, WeatherRow } from "@/lib/types";
+import { daySummary, weatherDay } from "@/lib/weather";
 
 interface Props {
   mobile: boolean;
   fiveMin: FiveMinRow[];
   model: Model;
   date: string | null;
+  /** Hourly site weather (empty for a home without a location). */
+  weather?: WeatherRow[];
 }
 
-export function Day({ mobile, fiveMin, model, date: requested }: Props) {
+export function Day({ mobile, fiveMin, model, date: requested, weather = [] }: Props) {
   const today = model.dates.at(-1) ?? model.asOf;
   const date = requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : today;
   const isToday = date === today;
@@ -31,6 +34,8 @@ export function Day({ mobile, fiveMin, model, date: requested }: Props) {
   // the median of the 14 days before it.
   const sun = useMemo(() => daylight(fiveMin, date, 1) ?? daylight(fiveMin, date, 14), [fiveMin, date]);
   const totals = useMemo(() => dayTotals(fiveMin, date), [fiveMin, date]);
+  const wx = useMemo(() => weatherDay(weather, date), [weather, date]);
+  const wxDay = useMemo(() => daySummary(wx, sun?.rise, sun?.set), [wx, sun]);
   const stats = useMemo(() => dayStats(P), [P]);
   const flows = useMemo(() => (totals ? flowsFrom(totals, "stored", daySplit(totals)) : null), [totals]);
   const [chartRef, chartW] = useWidth<HTMLDivElement>();
@@ -45,6 +50,7 @@ export function Day({ mobile, fiveMin, model, date: requested }: Props) {
   const rows =
     totals && stats
       ? [
+          ...(wxDay ? [{ label: "Weather · อากาศ", val: wxDay.en, color: "var(--color-text)" }] : []),
           { label: "Solar PV · ผลิตได้", val: kwhv(totals.pv), color: COLORS.pv },
           { label: "Home load · ใช้ในบ้าน", val: kwhv(totals.load), color: COLORS.load },
           { label: "Backup / Grid-load port", val: `${totals.backupLoad.toFixed(1)} / ${totals.gridLoad.toFixed(1)} kWh`, color: COLORS.load },
@@ -112,7 +118,15 @@ export function Day({ mobile, fiveMin, model, date: requested }: Props) {
 
       <div ref={chartRef} style={{ margin: `8px ${pad}px 0` }}>
         {P.length ? (
-          <DayPowerChart P={P} date={date} width={chartW} height={mobile ? 280 : 340} live={isToday} daylight={sun} />
+          <>
+            <DayPowerChart P={P} date={date} width={chartW} height={mobile ? 280 : 340} live={isToday} daylight={sun} weather={wx} />
+            {wxDay && (
+              <div className="caption" style={{ marginTop: 6 }}>
+                Weather: {wxDay.en} ({wxDay.th}). Hourly icons are Open-Meteo model data for the site (≈1 km), not a local sensor
+                {isToday ? "; later hours today are a forecast (dimmed)" : ""}. Hover an icon for cloud cover, rain and sunlight.
+              </div>
+            )}
+          </>
         ) : (
           <div className="state muted">No 5-minute data for {dmy(date)}. Export the inverter history for that day and run fetch_solis_day.py.</div>
         )}

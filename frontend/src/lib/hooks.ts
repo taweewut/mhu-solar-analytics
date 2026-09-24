@@ -16,6 +16,7 @@ export function useDataset(home: string | null) {
   const daily = useQuery({ queryKey: ["daily", home], queryFn: () => data.daily(home!), staleTime: STALE, enabled: on, ...LIVE });
   const bills = useQuery({ queryKey: ["bills", home], queryFn: () => data.bills(home!), staleTime: STALE, enabled: on });
   const bms = useQuery({ queryKey: ["bms", home], queryFn: () => data.bms(home!), staleTime: STALE, enabled: on, ...LIVE });
+  const weather = useQuery({ queryKey: ["weather", home], queryFn: () => data.weather(home!), staleTime: STALE, enabled: on, ...LIVE });
   const status = useQuery({ queryKey: ["fetch-status", home], queryFn: () => data.fetchStatus(home!), staleTime: STALE, enabled: on, ...LIVE });
   const ft = useQuery({ queryKey: ["ft-rates"], queryFn: data.ft, staleTime: STALE });
   const all = [five, daily, bills, bms, ft];
@@ -27,6 +28,7 @@ export function useDataset(home: string | null) {
     bills: bills.data ?? [],
     bms: bms.data ?? [],
     fetchStatus: status.data ?? null,
+    weather: weather.data ?? [],
     ft: ft.data ?? [],
   };
 }

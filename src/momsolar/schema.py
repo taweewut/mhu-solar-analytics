@@ -8,6 +8,7 @@
       <home>/bills.csv    one row per utility bill  (PEA Log / MEA Log)
       <home>/bms.csv      battery BMS samples       (optional — SolisCloud API snapshots)
       <home>/fetch_status.json  last API fetch      (optional — shown in the dashboard header)
+      <home>/weather.csv  hourly weather at the site (optional — Open-Meteo, homes with a location)
 
 These headers are the contract between the pipeline scripts (writers), the API (reader) and
 the frontend's ``lib/csv.ts`` (reader). Header names follow the SolisCloud / PEA Log labels,
@@ -27,6 +28,7 @@ BILLS_FILE = "bills.csv"
 BMS_FILE = "bms.csv"
 # Last SolisCloud fetch: when, the newest reading, and whether the daily budget paused it.
 STATUS_FILE = "fetch_status.json"
+WEATHER_FILE = "weather.csv"
 
 # Plant 5-min fields + the inverter fields the dashboard needs (MPPT split, SOH,
 # temperature) + the inverter's own day counters, which are more accurate than
@@ -100,6 +102,16 @@ BMS_COLUMNS = [
     "Cell Min(V)",
     "Cell Max(V)",
     "SOC(%)",
+]
+
+# Hourly weather at the site (Open-Meteo model data, not a local sensor). Time = local hour
+# start. Code = WMO weather code (0 clear … 95 thunderstorm).
+WEATHER_COLUMNS = [
+    "Time",  # 2026-09-23 10:00
+    "Code",
+    "Cloud(%)",
+    "Rain(mm)",
+    "Radiation(W/m2)",
 ]
 
 # Ft history (same Google Sheet); ft_rate in THB/unit. type 1 = residential.

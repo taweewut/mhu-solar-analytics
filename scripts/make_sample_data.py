@@ -18,7 +18,13 @@ import shutil
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from momsolar.schema import BILL_COLUMNS, BMS_COLUMNS, DAILY_COLUMNS, FIVE_MIN_COLUMNS
+from momsolar.schema import (
+    BILL_COLUMNS,
+    BMS_COLUMNS,
+    DAILY_COLUMNS,
+    FIVE_MIN_COLUMNS,
+    WEATHER_COLUMNS,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "sample_data"
@@ -294,6 +300,25 @@ def momhome_bms(rng: random.Random, five_min: list[dict]) -> list[dict]:
     return rows
 
 
+def momhome_weather(rng: random.Random) -> list[dict]:
+    """Invented hourly weather for 22–23/09 (a clear morning, afternoon showers)."""
+    rows = []
+    for day in ("2026-09-22", "2026-09-23"):
+        for h in range(24):
+            sun = max(0.0, math.sin(math.pi * (h + 0.5 - 6.2) / 12.4))
+            code = 61 if 14 <= h <= 16 else 3 if 11 <= h <= 13 else 2 if 8 <= h <= 10 else 1
+            rows.append(
+                {
+                    "Time": f"{day} {h:02d}:00",
+                    "Code": code,
+                    "Cloud(%)": {1: 15, 2: 45, 3: 95, 61: 100}[code],
+                    "Rain(mm)": round(rng.uniform(0.5, 3), 1) if code == 61 else 0,
+                    "Radiation(W/m2)": round(900 * sun * {1: 1, 2: 0.8, 3: 0.4, 61: 0.2}[code]),
+                }
+            )
+    return rows
+
+
 def main() -> None:
     rng = random.Random(2026)
     for home in HOMES:
@@ -306,6 +331,7 @@ def main() -> None:
     five = momhome_five_min(rng)
     write(OUT / "momhome" / "5min.csv", FIVE_MIN_COLUMNS, five)
     write(OUT / "momhome" / "bms.csv", BMS_COLUMNS, momhome_bms(random.Random(7), five))
+    write(OUT / "momhome" / "weather.csv", WEATHER_COLUMNS, momhome_weather(random.Random(11)))
 
     daily, bills = mhuhome(rng)
     write(OUT / "mhuhome" / "daily.csv", DAILY_COLUMNS, daily)

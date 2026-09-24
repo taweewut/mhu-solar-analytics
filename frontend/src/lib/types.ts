@@ -99,6 +99,15 @@ export interface Bill {
   amount_thb: number;
 }
 
+/** One hour of site weather (Open-Meteo, data/<home>/weather.csv). */
+export interface WeatherRow {
+  time: string; // "2026-09-23 10:00", local hour start
+  code: number | null; // WMO weather code
+  cloud_pct: number | null;
+  rain_mm: number | null;
+  radiation_wm2: number | null;
+}
+
 /** The last scheduled SolisCloud fetch (data/<home>/fetch_status.json). */
 export interface FetchStatus {
   checked: string; // "2026-09-23 22:32:57", local

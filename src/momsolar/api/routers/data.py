@@ -11,7 +11,15 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from momsolar.api import service
-from momsolar.api.schemas import BillOut, BmsOut, DailyOut, FiveMinOut, FtRateOut, HomeOut
+from momsolar.api.schemas import (
+    BillOut,
+    BmsOut,
+    DailyOut,
+    FiveMinOut,
+    FtRateOut,
+    HomeOut,
+    WeatherOut,
+)
 from momsolar.config import Settings, get_settings
 
 router = APIRouter(tags=["data"])
@@ -47,6 +55,15 @@ def bms(
 ) -> list[dict]:
     """Battery BMS samples (temperature, cell voltage), optionally for one local date."""
     return service.bms(path, date)
+
+
+@router.get("/homes/{home}/weather", response_model=list[WeatherOut])
+def weather(
+    date: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    path: Path = Depends(home_path),
+) -> list[dict]:
+    """Hourly weather at the site (Open-Meteo), optionally for one local date."""
+    return service.weather(path, date)
 
 
 @router.get("/homes/{home}/daily", response_model=list[DailyOut])

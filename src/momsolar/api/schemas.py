@@ -43,6 +43,14 @@ class HomeOut(BaseModel):
     dataGaps: list[DataGap] = []
 
 
+class WeatherOut(BaseModel):
+    time: str  # hour start, local UTC+7
+    code: float | None  # WMO weather code
+    cloud_pct: float | None
+    rain_mm: float | None
+    radiation_wm2: float | None
+
+
 class BmsOut(BaseModel):
     time: str  # the inverter's reading time, local UTC+7
     temp_min_c: float | None

@@ -3,8 +3,8 @@
 //   • api — the momsolar FastAPI (`VITE_API_BASE_URL`), which serves the same rows as JSON.
 // Everything downstream (lib/energy, lib/sankey, lib/tariff) is identical for both.
 
-import { parseBills, parseBms, parseDaily, parseFiveMin, parseFt } from "@/lib/csv";
-import type { Bill, BmsRow, DailyRow, FetchStatus, FiveMinRow, Freshness, FtRate, Home } from "@/lib/types";
+import { parseBills, parseBms, parseDaily, parseFiveMin, parseFt, parseWeather } from "@/lib/csv";
+import type { Bill, BmsRow, DailyRow, FetchStatus, FiveMinRow, Freshness, FtRate, Home, WeatherRow } from "@/lib/types";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "";
 const DATA_BASE = `${import.meta.env.BASE_URL}data/`;
@@ -82,6 +82,9 @@ export const data = {
     dataSource === "api" ? getJson(`/homes/${home(id)}/daily`) : getCsv(`${home(id)}/daily.csv`, parseDaily),
   bills: (id: string): Promise<Bill[]> =>
     dataSource === "api" ? getJson(`/homes/${home(id)}/bills`) : getCsv(`${home(id)}/bills.csv`, parseBills),
+  /** Hourly site weather; empty for a home without a location. */
+  weather: (id: string): Promise<WeatherRow[]> =>
+    dataSource === "api" ? getJson(`/homes/${home(id)}/weather`) : getCsv(`${home(id)}/weather.csv`, parseWeather),
   /** Battery BMS samples; empty for a home that doesn't log them. */
   bms: (id: string): Promise<BmsRow[]> =>
     dataSource === "api" ? getJson(`/homes/${home(id)}/bms`) : getCsv(`${home(id)}/bms.csv`, parseBms),

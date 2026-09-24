@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { DayNightBar } from "@/components/DayNight";
+import { WeatherStrip } from "@/components/Weather";
+import type { WeatherHour } from "@/lib/weather";
 import { AxisLabel, Dot } from "@/components/ui";
 import type { Daylight } from "@/lib/battery";
 import { dayChart, kw2, nearestIndex } from "@/lib/dayChart";
@@ -16,10 +18,12 @@ interface Props {
   live: boolean;
   /** Sun / moon bar above the plot (lib/battery daylight). */
   daylight?: Daylight | null;
+  /** Hourly site weather for the day (lib/weather); drawn under the sun / moon bar. */
+  weather?: WeatherHour[];
 }
 
 /** 5-min power chart (1d): PV / battery ± / grid areas, load line, SOC on the right axis. */
-export function DayPowerChart({ P, date, width, height, live, daylight }: Props) {
+export function DayPowerChart({ P, date, width, height, live, daylight, weather }: Props) {
   const g = useMemo(() => (width > 0 ? dayChart(P, width, height) : null), [P, width, height]);
   const [hi, setHi] = useState<number | null>(null);
   if (!g) return <div style={{ height }} />;
@@ -44,6 +48,9 @@ export function DayPowerChart({ P, date, width, height, live, daylight }: Props)
   return (
     <div>
       {daylight && <DayNightBar d={daylight} left={g.pl} width={g.xr - g.pl} />}
+      {weather && weather.some((x) => x.cond) && (
+        <WeatherStrip hours={weather} left={g.pl} width={g.xr - g.pl} rise={daylight?.rise} set={daylight?.set} lastT={live && g.lastT < 1435 ? g.lastT : null} />
+      )}
       <div style={{ position: "relative" }}>
         <svg
           width={g.W}

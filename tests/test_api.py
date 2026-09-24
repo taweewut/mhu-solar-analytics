@@ -97,3 +97,10 @@ def test_momhome_bms_samples(client):
     assert len(rows) == 50 and rows[0]["time"] == "2026-09-23 00:02:00"
     assert rows[0]["temp_min_c"] < rows[0]["temp_max_c"]
     assert client.get("/homes/mhuhome/bms").json() == []  # no BMS log: empty, not an error
+
+
+def test_momhome_weather_by_day(client):
+    rows = client.get("/homes/momhome/weather", params={"date": "2026-09-23"}).json()
+    assert len(rows) == 24 and rows[15]["code"] == 61 and rows[15]["rain_mm"] > 0
+    assert client.get("/homes/mhuhome/weather").json() == []
+    assert "location" not in client.get("/homes").json()[0]  # never exposed

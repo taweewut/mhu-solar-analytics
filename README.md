@@ -38,6 +38,7 @@ frontend/public/data/  (git-ignored; seeded from sample_data/)
   mhuhome/daily.csv    one row per day (Huawei → same columns; battery columns blank)
   mhuhome/bills.csv    MEA bills
   momhome/bms.csv      battery BMS samples every 15 min (SolisCloud API, logged going forward)
+  <home>/weather.csv   hourly site weather (Open-Meteo)
 src/momsolar/
   solis_api.py         SolisCloud API client (signed requests; keys from .env)
   fetch_solis_api.py   SolisCloud API → data/<home>/ (same rows as the exports)
@@ -116,6 +117,12 @@ It runs these, which you can also run on their own:
   `<home>/bms.csv` (along with the newest 5-min readings), from the day it was installed on:
   `scripts/install_poll.sh` sets up the launchd job (`--uninstall` removes it; log in
   `~/Library/Logs/mhu-solar-poll.log`). ~96 calls/day per endpoint.
+- **Weather (Day chart):** hourly site weather from Open-Meteo (free, no key; model data for
+  the location, not a sensor) in `<home>/weather.csv`: WMO code, cloud %, rain, sunlight.
+  Needs `location: {lat, lon}` in `homes.json` (git-ignored; rounded to 2 decimals before it's
+  sent). `python -m momsolar.fetch_weather --home momhome --since 2026-03-29` backfills; the poll
+  job refreshes it at most hourly. The Day chart shows an icon per hour under the sun/moon strip
+  (later hours today dimmed as forecast) and Day totals a one-line summary.
 - **SolisCloud rate limits:** the API document allows 2 requests/sec per endpoint; SolisCloud
   also refuses more than **200 calls per endpoint per day** (`R0000 … too many request 200
   times in 1DAYS`, undocumented). Calls are spaced 1 s apart and counted per endpoint per UTC
