@@ -20,7 +20,7 @@ import {
 } from "@/lib/battery";
 import type { BarGroup } from "@/lib/charts";
 import { readingsFor, sumDaily } from "@/lib/energy";
-import { dm, dmy, energyText, hm, minuteOfDay } from "@/lib/format";
+import { dm, energyText, hm, minuteOfDay } from "@/lib/format";
 import { useHome } from "@/lib/home";
 import { withInfo } from "@/lib/kpis";
 import { useWidth } from "@/lib/layout";
@@ -34,11 +34,6 @@ import type { BmsRow, DailyRow, FiveMinRow } from "@/lib/types";
 
 const DISCHARGED = "color-mix(in srgb, #3fa66a 45%, var(--color-bg))";
 const pct = (r: number | null) => (r == null ? "—" : `${Math.round(r * 100)} %`);
-const addDays = (iso: string, n: number) => {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
 const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
 export function Battery({
@@ -285,15 +280,13 @@ function SocHeatmap({ rows, sun, lastT, mobile }: { rows: HeatRow[]; sun: Daylig
 
 /**
  * Battery temperature by hour. The BMS reading is live-only (logged every 15 min from the day
- * the poll was installed), so days before that are "not tracked yet": collapsed into one caption
- * row with the latest reading — never a two-week hatched block that reads as an outage.
+ * the poll was installed) and can't be backfilled, so only logged days get a row — the grid
+ * grows one row a day up to 14. Days before logging aren't drawn at all (not an outage).
  */
 function TempSection({ rows, bms, sun, lastT, mobile, pad }: { rows: TempRow[]; bms: BmsRow[]; sun: Daylight | null; lastT: number | null; mobile: boolean; pad: number }) {
   const logged = rows.filter((r) => r.tracked);
-  const untracked = rows.filter((r) => !r.tracked);
   const start = bms.reduce<string | null>((a, r) => (a == null || r.time < a ? r.time : a), null);
   const latest = bms.reduce<BmsRow | null>((a, r) => (!a || r.time > a.time ? r : a), null);
-  const full = start ? dmy(addDays(start.slice(0, 10), 13)) : null;
   const latestText = latest?.temp_max_c != null ? `${latest.temp_min_c ?? "—"}–${latest.temp_max_c} °C` : "—";
   const showGrid = logged.length > 0 && (!mobile || logged.length >= 2);
   const hasMissing = logged.some((r) => r.cells.some((c) => c.kind === "missing"));
@@ -306,15 +299,13 @@ function TempSection({ rows, bms, sun, lastT, mobile, pad }: { rows: TempRow[]; 
       <Fact label={mobile ? "Charge range" : "Charge range (datasheet)"} value="0–45 °C" />
     </>
   );
-  const notTracked = start
-    ? `BMS temperature is read live every 15 min since ${dmy(start)} ${start.slice(11, 16)}. A row is added each day${full && untracked.length ? `, and the full 14 days will be here on ${full}` : ""}.`
-    : "BMS temperature is read live every 15 min by the scheduled SolisCloud fetch; nothing has been logged yet.";
+  const since = start ? `${dm(start)} ${start.slice(11, 16)}` : null;
 
   return (
     <Section
       style={{ margin: `${mobile ? 24 : 32}px ${pad}px 0` }}
       en={mobile ? "Battery temperature" : "Battery temperature by hour"}
-      th={`อุณหภูมิแบตเตอรี่${mobile ? "" : "รายชั่วโมง"} (BMS) · ${mobile ? "" : "warmest sensor · "}${logged.length} of ${rows.length} days logged`}
+      th={`อุณหภูมิแบตเตอรี่${mobile ? "" : "รายชั่วโมง"} (BMS) · ${mobile ? "" : "warmest sensor · "}${since ? `logged since ${since}` : "not logged yet"}`}
       extra={
         showGrid ? (
           <>
@@ -326,9 +317,11 @@ function TempSection({ rows, bms, sun, lastT, mobile, pad }: { rows: TempRow[]; 
         ) : undefined
       }
       note={
-        mobile && !showGrid
-          ? `Not tracked yet · ยังไม่เริ่มบันทึก. ${start ? `Logging started ${dm(start)} ${start.slice(11, 16)}, so the hour grid will appear from tomorrow, one row per day.` : notTracked}`
-          : undefined
+        !since
+          ? "Read live from the battery's BMS every 15 min by the scheduled SolisCloud fetch; nothing has been logged yet."
+          : mobile && !showGrid
+            ? `Logging started ${since}, so the hour grid appears from tomorrow, one row per day.`
+            : "Read live from the battery's BMS every 15 min; there's no history to backfill, so a row is added each day."
       }
     >
       {showGrid && (
@@ -367,17 +360,12 @@ function TempSection({ rows, bms, sun, lastT, mobile, pad }: { rows: TempRow[]; 
           })}
         </div>
       )}
-      {!mobile && untracked.length > 0 && (
+      {!mobile && since && (
         <div style={{ display: "grid", gridTemplateColumns: "96px minmax(0, 1fr)", marginTop: showGrid ? 8 : 0 }}>
-          <span className="muted-72" style={{ fontSize: 12, paddingTop: 12 }}>
-            {`${dm(untracked[untracked.length - 1].date)}–${dm(untracked[0].date)}`}
-          </span>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto auto", gap: 1, background: "var(--color-divider)", borderTop: "1px solid var(--color-text)", borderBottom: "1px solid var(--color-text)" }}>
-            <div style={{ background: "var(--color-bg)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 2 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Not tracked yet · ยังไม่เริ่มบันทึก</span>
-              <span className="caption">{notTracked}</span>
-            </div>
+          <span />
+          <div style={{ display: "grid", gridTemplateColumns: "auto auto auto minmax(0, 1fr)", gap: 1, background: "var(--color-divider)", borderTop: "1px solid var(--color-text)", borderBottom: "1px solid var(--color-text)" }}>
             {facts}
+            <div style={{ background: "var(--color-bg)" }} />
           </div>
         </div>
       )}
