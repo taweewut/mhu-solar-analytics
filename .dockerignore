@@ -1,0 +1,16 @@
+# Never send secrets, live data or build junk to the Docker build (deploy/nas).
+.git
+.env
+.venv
+**/__pycache__
+**/*.egg-info
+frontend/node_modules
+frontend/dist
+frontend/public/data
+raw_*
+docs
+deploy/nas/.env
+deploy/nas/data
+deploy/nas/state
+deploy/nas/reports
+deploy/nas/pipeline
