@@ -24,7 +24,7 @@ services:
       - ./data:/data
       - ./state:/state
       - ./reports:/reports # MhuHome FusionSolar reports saved by solar_pipeline
-      - ./pipeline:/pipeline:ro # optional: solar_pipeline (fetch_solar_report.py + Gmail token)
+      - ./pipeline:/pipeline # optional: solar_pipeline (fetch_solar_report.py + Gmail token; writable for token refresh)
     restart: unless-stopped
 
   cloudflared:
