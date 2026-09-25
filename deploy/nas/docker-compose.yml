@@ -11,6 +11,17 @@ services:
       - ./data:/srv/data:ro
     ports:
       - "8090:8080" # LAN: http://<nas>:8090/?key=…
+    depends_on: [gate]
+    restart: unless-stopped
+
+  # Guest links that expire (python -m momsolar.guest serve): same image as the poller, ~20 MB RAM,
+  # only reachable from `web`. Changing SOLAR_GUEST_SECRET cancels every guest link.
+  gate:
+    image: mhu-solar-poller
+    command: ["python", "-m", "momsolar.guest", "serve", "--port", "8081"]
+    environment:
+      SOLAR_GUEST_SECRET: ${SOLAR_GUEST_SECRET:?set SOLAR_GUEST_SECRET in .env}
+    depends_on: [poller]
     restart: unless-stopped
 
   poller:

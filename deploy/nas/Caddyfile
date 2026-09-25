@@ -1,16 +1,30 @@
 # Dashboard + live data behind a secret link: the first visit to /?key=<SOLAR_WEB_KEY> stores a
-# year-long cookie (so a TV bookmark keeps working), and anything without it gets 403.
+# year-long cookie (so a TV bookmark keeps working). Everyone else goes to the guest check
+# (momsolar.guest in the `gate` service): a valid /?guest=<token> link or cookie gets in until the
+# link expires, anything else gets 403.
 # Plain HTTP inside Docker: HTTPS comes from the Cloudflare Tunnel in front.
 {
 	auto_https off
 	admin off
 }
 
+(app) {
+	# Live data from the poller's volume (never the copy baked into the build).
+	handle /data/* {
+		root * /srv
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle {
+		root * /srv/dist
+		file_server
+	}
+}
+
 :8080 {
 	encode zstd gzip
 
-	# `route` keeps these in the written order (Caddy would otherwise run the file handlers before
-	# the 403): key link → no cookie → live data → the app.
+	# `route` keeps these in the written order: key link → family cookie → guest check → the app.
 	route {
 		@setkey query key={$SOLAR_WEB_KEY}
 		handle @setkey {
@@ -18,20 +32,16 @@
 			redir * {path} 302
 		}
 
-		@nokey not header Cookie *solar_key={$SOLAR_WEB_KEY}*
-		handle @nokey {
-			respond "Forbidden" 403
+		@family header Cookie *solar_key={$SOLAR_WEB_KEY}*
+		handle @family {
+			import app
 		}
 
-		# Live data from the poller's volume (never the copy baked into the build).
-		handle /data/* {
-			root * /srv
-			header Cache-Control "no-cache"
-			file_server
-		}
 		handle {
-			root * /srv/dist
-			file_server
+			forward_auth gate:8081 {
+				uri /check
+			}
+			import app
 		}
 	}
 }
