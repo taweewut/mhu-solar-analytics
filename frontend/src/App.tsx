@@ -11,6 +11,7 @@ import { feedStatus } from "@/lib/status";
 import type { Home } from "@/lib/types";
 import { Battery } from "@/pages/Battery";
 import { Day } from "@/pages/Day";
+import { DayDaily } from "@/pages/DayDaily";
 import { Health } from "@/pages/Health";
 import { Overview } from "@/pages/Overview";
 import { Savings } from "@/pages/Savings";
@@ -89,7 +90,12 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
   if (error) body = loadError(error);
   else if (!model || !caps || !available) body = <div className="state muted">Loading data…</div>;
   else if (route === "overview") body = <Overview mobile={mobile} fiveMin={fiveMin} daily={daily} model={model} caps={caps} />;
-  else if (route === "day") body = <Day mobile={mobile} fiveMin={fiveMin} model={model} date={params.get("d")} weather={weather} />;
+  else if (route === "day")
+    body = caps.fiveMin ? (
+      <Day mobile={mobile} fiveMin={fiveMin} model={model} date={params.get("d")} weather={weather} />
+    ) : (
+      <DayDaily mobile={mobile} daily={daily} model={model} date={params.get("d")} weather={weather} />
+    );
   else if (route === "savings") body = <Savings mobile={mobile} model={model} bills={bills} daily={daily} />;
   else if (route === "trends") body = <Trends mobile={mobile} daily={daily} model={model} weather={weather} />;
   else if (route === "battery") body = <Battery mobile={mobile} fiveMin={fiveMin} daily={daily} bms={bms} model={model} paused={feed?.kind === "paused"} />;

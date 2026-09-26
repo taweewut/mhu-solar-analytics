@@ -3,9 +3,10 @@ import { dmy } from "@/lib/format";
 
 /**
  * ‹ [dd/mm/yyyy] › Today — step between days that have data (Day and Health pages).
- * `dates` = days with 5-minute data, oldest first; `latest` = the newest of them.
+ * `dates` = days with data, oldest first; `latest` = the newest of them. `latestLabel` names the
+ * jump-to-newest button ("Latest" for a daily report, whose newest day is yesterday).
  */
-export function DateNav({ date, dates, latest, onGo }: { date: string; dates: string[]; latest: string; onGo: (d: string) => void }) {
+export function DateNav({ date, dates, latest, onGo, latestLabel = "Today" }: { date: string; dates: string[]; latest: string; onGo: (d: string) => void; latestLabel?: string }) {
   const prev = dates.filter((d) => d < date).at(-1);
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -21,7 +22,7 @@ export function DateNav({ date, dates, latest, onGo }: { date: string; dates: st
         <ChevronRight />
       </button>
       <button className="btn btn-primary" onClick={() => onGo(latest)}>
-        Today
+        {latestLabel}
       </button>
     </div>
   );

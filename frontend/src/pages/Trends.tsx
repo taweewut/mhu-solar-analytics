@@ -3,6 +3,7 @@ import { GroupedBarChart } from "@/components/GroupedBarChart";
 import { KpiGrid, type Kpi } from "@/components/Kpis";
 import { withInfo } from "@/lib/kpis";
 import { MonthDayBreakdown } from "@/components/MonthDayBreakdown";
+import { reportDates } from "@/lib/dayReport";
 import { PageTitle } from "@/components/ui";
 import { EstLegend, Legend, LegendRow, Section, Seg } from "@/components/ui2";
 import type { BarGroup } from "@/lib/charts";
@@ -232,7 +233,7 @@ export function Trends({ mobile, daily, model, weather = [] }: { mobile: boolean
         </Section>
       </div>
 
-      <MonthDayBreakdown daily={daily} weather={weather} fiveMinDates={model.dates} mobile={mobile} style={{ margin: `28px ${pad}px 0` }} />
+      <MonthDayBreakdown daily={daily} weather={weather} dayDates={model.dates.length ? model.dates : reportDates(daily)} mobile={mobile} style={{ margin: `28px ${pad}px 0` }} />
     </>
   );
 }

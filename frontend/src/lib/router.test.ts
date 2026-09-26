@@ -29,10 +29,11 @@ describe("pages follow the home's data", () => {
   const huawei = { ...base, battery: null } as Home;
   const solis = { ...base, battery: { kwh: 16, label: "" } } as Home;
 
-  it("hides Day / Health without 5-minute data and Battery without a battery", () => {
+  it("hides Health / TV without 5-minute data and Battery without a battery; Day always shows", () => {
     const caps = capsFor(huawei, []);
-    expect(["overview", "trends", "savings"].every((r) => routeAvailable(r as never, caps))).toBe(true);
-    expect(["day", "health", "battery"].some((r) => routeAvailable(r as never, caps))).toBe(false);
+    // Day falls back to the daily report for a home without 5-minute data.
+    expect(["overview", "day", "trends", "savings"].every((r) => routeAvailable(r as never, caps))).toBe(true);
+    expect(["health", "tv", "battery"].some((r) => routeAvailable(r as never, caps))).toBe(false);
     const full = capsFor(solis, ["2026-09-23"]);
     expect(["day", "health", "battery"].every((r) => routeAvailable(r as never, full))).toBe(true);
   });

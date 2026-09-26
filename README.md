@@ -9,7 +9,9 @@ name in the header.
 | **MhuHome** | 5 kWp Huawei, no battery, installed 20/09/2020 | FusionSolar daily-emailed month-to-date reports, from 23/09/2020 (via `solar_pipeline`) | MEA Log |
 
 Each home only gets the pages its data supports. MomHome has all six. MhuHome has Overview,
-Trends and Savings; Day and Health need 5-minute data, and Battery needs a battery.
+Day, Trends and Savings; Health needs 5-minute data, and Battery needs a battery. Without
+5-minute data, Day shows one day of the daily report (newest: yesterday) instead of a power
+curve: the day's totals, its energy flow and the hourly site weather (`pages/DayDaily.tsx`).
 Product brief and KPI formulas: `MomHome/design_handoff_momhome_solar/project.md`.
 
 Laid out like findash: a Python package under `src/` (pipelines + FastAPI data API) and a
@@ -54,7 +56,7 @@ frontend/src/lib/
   sankey.ts   energy-flow layout, incl. Export sink and no-battery homes  (sankey.test.ts)
   energy.ts   day totals, period flows, self-sufficiency                  (energy.test.ts)
   clean.ts    data-quality rules (meter-offline days)                     (clean.test.ts)
-  trends.ts · battery.ts · health.ts · monthDays.ts · charts.ts · dayChart.ts   (tested)
+  trends.ts · battery.ts · health.ts · monthDays.ts · charts.ts · dayChart.ts · dayReport.ts   (tested)
   home.tsx    current home + which pages it supports; router.ts: #/<home>/<page>
 ```
 
