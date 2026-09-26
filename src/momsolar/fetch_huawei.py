@@ -8,6 +8,12 @@ columns in a different order, so files are recognised by their header row and co
 read by name. Duplicates (a month in both ``Y2022`` and ``All Year``) merge by date, the
 newest file winning.
 
+FusionSolar emails a month-to-date report every morning (~07:20), and it already carries a row
+for that day: near zero, because the day has barely started. So a file's rows dated on or after
+the day the file was made (its modification time, in Thai time) are partial and skipped; the
+next morning's report brings the complete day. solar_pipeline sets each saved report's
+modification time to the email's send time, so this holds for files it saves.
+
 The MEA Log (``--mea-log``: a .xlsx/.csv download of the Google Sheet) becomes bills.csv.
 
 Output: ``<out>/<home>/daily.csv`` and ``bills.csv``. Huawei has no 5-minute export here and
@@ -24,6 +30,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterable
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from momsolar.bills import MEA_LOG, import_log
@@ -55,6 +62,8 @@ DAILY_SOURCE = {
     "Generation(kWh)": "Inverter Yield (kWh)",
 }
 PERIOD_HEADERS = ("Statistical Period", "Statistical Time")
+# The plants' time zone (Thailand has no DST): a report's day boundaries are Thai days.
+PLANT_TZ = timezone(timedelta(hours=7))
 
 
 def find_table(sheets: dict[str, list[Row]]) -> tuple[list[Row], int, str] | None:
@@ -87,6 +96,11 @@ def huawei_daily_rows(sheets: dict[str, list[Row]]) -> list[dict[str, str]]:
     return out
 
 
+def made_on(path: Path) -> date:
+    """The Thai date a report file was made (its modification time)."""
+    return datetime.fromtimestamp(path.stat().st_mtime, PLANT_TZ).date()
+
+
 def run(
     raw: Path | Iterable[Path] | None,
     out: Path,
@@ -108,7 +122,11 @@ def run(
             rows = huawei_daily_rows(sheets)
             if not rows:
                 continue  # e.g. the Power BI export
-            log(f"daily  {p.parent.name}/{p.name}: {len(rows)} days")
+            made = made_on(p).isoformat()
+            partial = [r["Time"] for r in rows if r["Time"] >= made]
+            rows = [r for r in rows if r["Time"] < made]
+            note = f" (skipped partial {', '.join(partial)})" if partial else ""
+            log(f"daily  {p.parent.name}/{p.name}: {len(rows)} days{note}")
             new += rows  # oldest file first, so merge() keeps the newest export of a day
         if new:
             rowsd = merge(read_csv(home_dir / DAILY_FILE), new, key=lambda r: r["Time"])

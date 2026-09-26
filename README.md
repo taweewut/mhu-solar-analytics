@@ -6,7 +6,7 @@ name in the header.
 | Home | System | Data | Bills |
 |---|---|---|---|
 | **MomHome** | 7.44 kWp, Solis S6-EH1P10K-L-PLUS, 16 kWh LiFePO4, zero export | SolisCloud exports: 5-min + monthly (daily rows) | PEA Log |
-| **MhuHome** | 5 kWp Huawei, no battery, installed 20/09/2020 | FusionSolar monthly reports, from 23/09/2020 (via `solar_pipeline`) | MEA Log |
+| **MhuHome** | 5 kWp Huawei, no battery, installed 20/09/2020 | FusionSolar daily-emailed month-to-date reports, from 23/09/2020 (via `solar_pipeline`) | MEA Log |
 
 Each home only gets the pages its data supports. MomHome has all six. MhuHome has Overview,
 Trends and Savings; Day and Health need 5-minute data, and Battery needs a battery.
@@ -137,10 +137,14 @@ It runs these, which you can also run on their own:
 - **MomHome:** the monthly inverter report gives `daily.csv`. The 5-min All-History export
   gives `5min.csv`; a newer export of a day replaces the whole day. The early (Mar/Apr 2026)
   54-column 5-min layout is skipped, because it has no grid power.
-- **MhuHome:** `solar_pipeline` (a separate Gmail fetcher) saves each month's
-  FusionSolar report from Gmail into `Raw from Inverter report/Y<year>/` on the 1st.
-  `fetch_huawei` reads that folder recursively, so run `scripts/refresh_all.sh` after it
-  (or chain it — see below).
+- **MhuHome:** `solar_pipeline` (a separate Gmail fetcher) saves the FusionSolar report from
+  Gmail into `Raw from Inverter report/Y<year>/`. FusionSolar emails a month-to-date report
+  every morning (~07:20); `fetch_solar_report.py --latest` saves the newest one per month
+  (the NAS poller runs it hourly from 07:00), so MhuHome's data runs to **yesterday**. The
+  email on the 1st carries the complete previous month. Each morning's report also has a
+  near-zero row for that same day: the fetcher stamps each file with the email's send time,
+  and `fetch_huawei` skips rows dated on or after it. `fetch_huawei` reads the folder
+  recursively, so run `scripts/refresh_all.sh` after it (or chain it — see below).
 - **Bills:** the sheet is private, so download it as .xlsx. The PEA Log's Year / Usage Month
   are broken formulas, so the usage month comes from `Month Year`. The MEA Log's are valid and
   used as-is (its bill is dated the following month), and the amount is its

@@ -55,7 +55,8 @@ npm run dev            # Vite on 127.0.0.1:5173
 - **Production = the NAS** (`deploy/nas/docker-compose.yml`, app at
   `/volume1/docker/mhu-solar/app`, `ssh nas`). Three services: `web` (Caddy + the built site;
   a `?key=` secret link sets a family cookie), `gate` (`momsolar.guest`, checks `?guest=` tokens),
-  and `poller` (15-min loop: SolisCloud, weather, MhuHome's monthly Gmail report). Use the
+  and `poller` (15-min loop: SolisCloud, weather, and hourly from 07:00 MhuHome's daily Gmail
+  report). Use the
   `synology-deploy` skill for deploys. The Cloudflare Tunnel connector is **not** part of this
   project (it's shared, in `/volume1/docker/cloudflared`); don't add it back to the compose.
 - **The NAS poller replaced the Mac's launchd poller.** Don't run `install_poll.sh` while the NAS
@@ -74,6 +75,10 @@ npm run dev            # Vite on 127.0.0.1:5173
   Known outages go in `homes.json` → `dataGaps`.
 - **Imports are idempotent:** rows merge by key (day, 5-min time, usage month). Raw files are
   recognised by **header row, not file name**. Bills match solar data by **usage month**.
+- **A FusionSolar report's modification time is its send time.** The morning email carries a
+  near-zero row for that same day; `fetch_huawei` skips rows dated on/after the file's mtime
+  (Thai date), and `solar_pipeline` stamps saved files with the email time. Copy report files
+  with their mtime (`cp -p`, `rsync -t`), or today's partial row can slip in as a real day.
 - **Savings** follow the README's "How savings are estimated" (Type 1.2 tiers, Ft, VAT, TOU,
   `meterNetsExport`). Change the formula and its `*.test.ts` together.
 - **Units:** kWh below 1,000, MWh from 1,000. Bills, per-day figures and charts stay in kWh.
@@ -100,8 +105,9 @@ The API has no auth: keep it LAN-only.
 
 ## Neighbours
 
-- `~/dev/electric_solar/solar_pipeline`: the Gmail fetcher that saves MhuHome's monthly
-  FusionSolar report (mounted into the NAS poller at `/pipeline`).
+- `~/dev/electric_solar/solar_pipeline`: the Gmail fetcher that saves MhuHome's FusionSolar
+  reports (`--latest` daily; mounted into the NAS poller at `/pipeline`). Not under git, and
+  the NAS runs its own copy in `deploy/nas/pipeline/`: after editing it, copy it there.
 - `~/dev/electric_solar/MhuHomeSolar`: raw inverter exports and older Power BI / Excel work.
 
 ## Git
