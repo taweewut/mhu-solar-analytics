@@ -342,7 +342,8 @@ export function tvModel(i: TvInput): TvModel {
       h,
       icon: x?.cond ? skyIcon(x.cond.sky) : null,
       forecast,
-      rain: mm >= 0.1 ? one(mm) : null,
+      // Whole mm from 10 up: "26.5" is too wide for an hour column at 36 px.
+      rain: mm >= 9.95 ? String(Math.round(mm)) : mm >= 0.1 ? one(mm) : null,
       kwh: forecast ? null : v,
       pct: forecast || v == null ? 0 : Math.round(Math.min(1, v / BAR_MAX) * 100),
       part,
