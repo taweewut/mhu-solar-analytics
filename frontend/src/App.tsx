@@ -69,7 +69,7 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
       })
     : null;
 
-  // TV mode: full screen, no nav (#/<home>/tv?s=20 sets the seconds per slide).
+  // TV mode: full screen, no nav (URL options are listed in pages/Tv.tsx).
   if (route === "tv") {
     if (error) return loadError(error);
     if (!model || !caps || !available) return <div className="state muted">Loading…</div>;
@@ -77,11 +77,15 @@ function HomeApp({ home, route, params }: { home: Home; route: Route; params: UR
     return (
       <Tv
         fiveMin={fiveMin}
+        daily={daily}
         model={model}
         weather={weather}
-        feed={feed}
-        seconds={Number(params.get("s")) || 20}
-        theme={theme === "light" || theme === "dark" ? theme : "auto"}
+        feed={feed?.kind ?? null}
+        seconds={Number(params.get("s")) || undefined}
+        theme={theme === "light" || theme === "dark" || theme === "night" ? theme : "auto"}
+        at={params.get("at")}
+        showSavings={params.get("savings") !== "0"}
+        demo={params.get("demo")}
       />
     );
   }
