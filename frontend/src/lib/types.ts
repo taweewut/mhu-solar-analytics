@@ -48,6 +48,8 @@ export interface DailyRow {
 export interface Home {
   id: string;
   name: string; // "MomHome"
+  /** What the family calls the house, for the TV header (e.g. "บ้านคุณแม่"). */
+  nameTh?: string;
   subtitle: string; // desktop nav: "Solis · 7.44 kWp · 16 kWh"
   subtitleShort: string; // mobile header
   /** Switch-on date "YYYY-MM-DD"; the first data row if absent (the reports can start later). */
