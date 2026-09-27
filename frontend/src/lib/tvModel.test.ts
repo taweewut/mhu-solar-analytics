@@ -121,6 +121,14 @@ describe("TV model · a low battery and a rainy day", () => {
     expect(text(m.strip.lines[1])).toBe("แบตชาร์จช้า · ฝนตกทั้งวัน ผลิตไฟได้น้อย");
     expect(m.strip.hours.find((h) => h.h === 13)).toMatchObject({ icon: "storm", rain: "6.5" });
   });
+
+  it("heavy rain is shown in whole mm so it fits the hour column", () => {
+    const s = SCENARIOS.rainy();
+    const weather = s.weather.map((w) => (w.time.endsWith("13:00") ? { ...w, rain_mm: 26.5 } : w.time.endsWith("12:00") ? { ...w, rain_mm: 9.96 } : w));
+    const m = tvModel({ ...s, weather, savings: null, capacityKwh: 16, kwp: 7.44 });
+    expect(m.strip.hours.find((h) => h.h === 13)!.rain).toBe("27");
+    expect(m.strip.hours.find((h) => h.h === 12)!.rain).toBe("10");
+  });
 });
 
 describe("TV model · data not updating", () => {
