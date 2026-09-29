@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHome } from "@/lib/home";
 import type { Model } from "@/lib/model";
 import type { FeedKind } from "@/lib/status";
@@ -100,18 +100,25 @@ export function Tv(props: TvProps) {
   // Rotation: two stacked frames; the next screen goes into the hidden one, then they swap.
   const [rot, setRot] = useState<{ slots: [TvScreen, TvScreen]; on: 0 | 1 }>({ slots: ["now", "now"], on: 0 });
   const screens = m.screens;
+  // The model is rebuilt every minute (the clock) and on each data refresh, with a new `screens`
+  // array each time. `step` reads it through a ref so it stays the same function: when it
+  // changed, the hold timer below restarted every minute, and the 60 s ตอนนี้ hold raced the
+  // minute tick and never moved on (seen on iPad Safari). The 6-hour reload was reset too.
+  const screensRef = useRef(screens);
+  screensRef.current = screens;
   const step = useCallback(
     (dir: 1 | -1) =>
       setRot((r) => {
-        if (!screens.length) return r;
-        const i = screens.indexOf(r.slots[r.on]);
-        const next = screens[(((i < 0 ? -dir : i) + dir) % screens.length + screens.length) % screens.length];
+        const list = screensRef.current;
+        if (!list.length) return r;
+        const i = list.indexOf(r.slots[r.on]);
+        const next = list[(((i < 0 ? -dir : i) + dir) % list.length + list.length) % list.length];
         const off = r.on === 0 ? 1 : 0;
         const slots: [TvScreen, TvScreen] = [...r.slots] as [TvScreen, TvScreen];
         slots[off] = next;
         return { slots, on: off };
       }),
-    [screens],
+    [],
   );
   const current = rot.slots[rot.on];
   useEffect(() => {
