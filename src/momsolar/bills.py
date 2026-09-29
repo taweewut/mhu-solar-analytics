@@ -16,6 +16,7 @@ import csv
 import io
 import urllib.request
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 from momsolar.schema import BILL_COLUMNS, BILLS_FILE, FT_COLUMNS, FT_FILE
@@ -48,6 +49,12 @@ MEA_LOG = BillLog(tab="MEA Log", amount="ค่าไฟฟ้ารวม VAT",
 LOGS = {"PEA": PEA_LOG, "MEA": MEA_LOG}
 
 
+def satang(v: float) -> Decimal:
+    """Baht to the satang the way a spreadsheet shows it: 15 significant digits, then half-up
+    (a formula's 250.11499999999998 is 250.115 there, shown as 250.12; round() gives 250.11)."""
+    return Decimal(format(v, ".15g")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def _usage_month(rec: dict[str, str], bill_date) -> tuple[int, int]:
     y, m = num(rec.get("Year")), num(rec.get("Usage Month"))
     if y and m and 2000 < y < 2100 and 1 <= m <= 12:
@@ -71,6 +78,11 @@ def bill_rows(sheets: dict[str, list[Row]], log: BillLog) -> list[dict[str, str]
             bill_date = parse_date(rec["Month Year"], log.date_order)
             year, month = _usage_month(rec, bill_date)
             row = {c: fmt_num(num(rec.get(c))) for c in BILL_COLUMNS}
+            # Baht to the satang: the Sheets API gives a TOU split's full value (123.4567), where
+            # the .xlsx download has it as shown (123.46); both read the same this way.
+            for c in ("OnPeak", "OffPeak"):
+                v = num(rec.get(c))
+                row[c] = fmt_num(None if v is None else float(satang(v)))
             row.update(
                 {
                     "Month Year": bill_date.isoformat(),
@@ -136,7 +148,13 @@ def write_ft(data_dir: Path, fts: list[dict[str, str]]) -> int:
 
 def import_log(source: str, log: BillLog, data_dir: Path, home: str, logf=print) -> dict[str, int]:
     """Bills into ``<data>/<home>/bills.csv``; an Ft table in the same workbook into ft_rates."""
-    sheets = load_source(source, log.tab)
+    return import_sheets(load_source(source, log.tab), log, data_dir, home, logf)
+
+
+def import_sheets(
+    sheets: dict[str, list[Row]], log: BillLog, data_dir: Path, home: str, logf=print
+) -> dict[str, int]:
+    """:func:`import_log` for a workbook already read (e.g. from the Sheets API)."""
     bills = bill_rows(sheets, log)
     logf(f"bills  {len(bills)} from {log.tab}")
     counts = {f"{home}/{BILLS_FILE}": write_bills(data_dir / home, bills)}

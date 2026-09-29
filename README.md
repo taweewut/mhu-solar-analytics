@@ -147,7 +147,12 @@ It runs these, which you can also run on their own:
   near-zero row for that same day: the fetcher stamps each file with the email's send time,
   and `fetch_huawei` skips rows dated on or after it. `fetch_huawei` reads the folder
   recursively, so run `scripts/refresh_all.sh` after it (or chain it — see below).
-- **Bills:** the sheet is private, so download it as .xlsx. The PEA Log's Year / Usage Month
+- **Bills on the NAS:** the poller reads the Google Sheet itself, hourly from 07:00, through the
+  Sheets API (`momsolar.fetch_bills`). It uses solar_pipeline's Google sign-in
+  (`pipeline/token.json`, read-only Gmail + Sheets) and the sheet ID in the NAS `.env`
+  (`MOMSOLAR_SHEET_ID`), and writes only when the sheet changed. A bill typed into the sheet
+  shows up within the hour. Dates come through as dates, so both logs parse as from the .xlsx.
+- **Bills on the Mac:** the sheet is private, so download it as .xlsx. The PEA Log's Year / Usage Month
   are broken formulas, so the usage month comes from `Month Year`. The MEA Log's are valid and
   used as-is (its bill is dated the following month), and the amount is its
   `ค่าไฟฟ้ารวม VAT` column. Bills are matched to solar data by **usage month** for both homes.

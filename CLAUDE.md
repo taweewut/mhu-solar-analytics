@@ -56,7 +56,8 @@ npm run dev            # Vite on 127.0.0.1:5173
   `/volume1/docker/mhu-solar/app`, `ssh nas`). Three services: `web` (Caddy + the built site;
   a `?key=` secret link sets a family cookie), `gate` (`momsolar.guest`, checks `?guest=` tokens),
   and `poller` (15-min loop: SolisCloud, weather, and hourly from 07:00 MhuHome's daily Gmail
-  report). Use the
+  report and the bills sheet via `momsolar.fetch_bills`; the sheet ID is `MOMSOLAR_SHEET_ID` in
+  the NAS `.env`, never in the repo). Use the
   `synology-deploy` skill for deploys. The Cloudflare Tunnel connector is **not** part of this
   project (it's shared, in `/volume1/docker/cloudflared`); don't add it back to the compose.
 - **The NAS poller replaced the Mac's launchd poller.** Don't run `install_poll.sh` while the NAS

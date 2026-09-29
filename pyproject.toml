@@ -29,6 +29,11 @@ api = [
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
 ]
+# Reading the bills sheet through the Google Sheets API (momsolar.fetch_bills, the NAS poller).
+sheets = [
+    "google-api-python-client>=2.100",
+    "google-auth>=2.20",
+]
 
 [project.scripts]
 fetch-solis-day = "momsolar.fetch_solis_day:main"

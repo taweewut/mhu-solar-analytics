@@ -1,7 +1,8 @@
 #!/bin/sh
 # The NAS replaces the Mac's launchd jobs: every 15 minutes MomHome's newest SolisCloud readings
-# + a battery BMS sample, weather for both homes at most hourly, and MhuHome's FusionSolar report
-# from Gmail (if solar_pipeline is mounted at /pipeline) + its import.
+# + a battery BMS sample, weather for both homes at most hourly, MhuHome's FusionSolar report
+# from Gmail (if solar_pipeline is mounted at /pipeline) + its import, and the bills from the
+# Google Sheet (if MOMSOLAR_SHEET_ID is set in .env).
 # The API budget / rate limits in momsolar.solis_api apply as before.
 DATA=/data
 while true; do
@@ -16,6 +17,13 @@ while true; do
   if [ -f /pipeline/fetch_solar_report.py ] && [ "$(date +%H)" -ge 07 ] && [ "$(date +%M)" -lt 15 ]; then
     SOLAR_REPORT_DIR=/reports SOLAR_REPORT_LOG=/state/solar_report.log python -W ignore /pipeline/fetch_solar_report.py --latest \
       && python -W ignore -m momsolar.fetch_huawei --home mhuhome --raw /reports --out "$DATA"
+  fi
+  # Bills: the PEA / MEA Log and the Ft table from the Google Sheet, read-only with the same
+  # Google sign-in, hourly from 07:00. It writes only when the sheet changed; a failure is
+  # logged and retried the next hour.
+  if [ -n "${MOMSOLAR_SHEET_ID:-}" ] && [ -f /pipeline/token.json ] && [ "$(date +%H)" -ge 07 ] && [ "$(date +%M)" -lt 15 ]; then
+    python -W ignore -m momsolar.fetch_bills --sheet-id "$MOMSOLAR_SHEET_ID" --token /pipeline/token.json \
+      --out "$DATA" --state /state/bills_sheet.sha256
   fi
   # Sleep to the next quarter hour (+2 min, so the inverter's 5-min upload is in).
   now=$(date +%s); next=$(( (now / 900 + 1) * 900 + 120 )); sleep $(( next - now ))
